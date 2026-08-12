@@ -5,5 +5,5 @@
   "total_tokens_approx": 0,
   "total_tokens_saved": 0,
   "task_details": [],
-  "report_markdown": "# Relatório de Encerramento\n\n## Status\nCONCLUÍDO COM SUCESSO\n\n## Arquivos Alterados\n- game-option-a.html\n- game-option-a.css\n- game-option-a.js\n- game-option-b.html\n- game-option-b.css\n- game-option-b.js\n- hub.html"
+  "report_markdown": "# RELATÓRIO FINAL\n\n- **Arquivos alterados:** `index.html`, `styles.css`, `script.js`, `navigation.js`\n- **Status:** CONCLUÍDO COM SUCESSO"
 }

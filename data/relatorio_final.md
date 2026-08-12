@@ -1,13 +1,4 @@
-# Relatório de Encerramento
+# RELATÓRIO FINAL
 
-## Status
-CONCLUÍDO COM SUCESSO
-
-## Arquivos Alterados
-- game-option-a.html
-- game-option-a.css
-- game-option-a.js
-- game-option-b.html
-- game-option-b.css
-- game-option-b.js
-- hub.html
+- **Arquivos alterados:** `index.html`, `styles.css`, `script.js`, `navigation.js`
+- **Status:** CONCLUÍDO COM SUCESSO
