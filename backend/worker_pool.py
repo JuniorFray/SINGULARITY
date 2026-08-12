@@ -94,8 +94,23 @@ def apply_ai_output_to_filesystem(title: str, instruction: str, output_text: str
             target_path = target_from_instruction
 
         if target_path:
+            # Proteção de Integridade: Não sobrescrever arquivo existente (>200 bytes) com snippet suspeito (<50 bytes)
+            if os.path.exists(target_path):
+                old_size = os.path.getsize(target_path)
+                if old_size > 200 and len(code_content) < 50:
+                    print(f"[Worker FileSystem] ALERTA: Ignorando gravação em {target_path} (snippet de {len(code_content)} chars iria corromper arquivo de {old_size} bytes).")
+                    continue
+
             try:
                 os.makedirs(os.path.dirname(target_path), exist_ok=True)
+                # Criar backup de segurança antes de modificar
+                if os.path.exists(target_path):
+                    try:
+                        import shutil
+                        shutil.copy2(target_path, target_path + ".bak")
+                    except Exception:
+                        pass
+
                 with open(target_path, "w", encoding="utf-8") as f:
                     f.write(code_content)
                 affected_files.append(target_path)
