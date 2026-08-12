@@ -43,26 +43,27 @@ FORMATO DE SAÍDA OBRIGATÓRIO:
 LAYER2_MANAGER_PROMPT = """OBJETIVO MACRO:
 {macro_goal}
 
-DIRETÓRIO DE TRABALHO:
+DIRETÓRIO ALVO / CWD:
 {work_dir}
 
 ARQUITETURA DEFINIDA PELO DIRETOR (Camada 1):
 {architecture_json}
 
-SNAPSHOT DO CÓDIGO ATUAL DO PROJETO:
+SNAPSHOT DO CÓDIGO ATUAL DO PROJETO EM "{work_dir}":
 {project_context}
 
-INSTRUÇÕES:
-Você é o Gerente de Projetos Técnico. Analise a arquitetura acima e o código atual do projeto.
-Gere a lista COMPLETA de subtarefas técnicas atômicas para execução pelos operários.
-Cada subtarefa deve ser autossuficiente e independente o suficiente para ser executada isoladamente.
-OBRIGATÓRIO: O título e a instrução de cada tarefa DEVEM conter o caminho exato do arquivo (ex: `games/optionA/optionA.html`, `index.html`, `app.js`).
+INSTRUÇÕES DE ESCOPO LOCAL (CWD POWERSHELL):
+Você é o Gerente de Projetos Técnico. O usuário definiu o diretório alvo: "{work_dir}".
+Considere que TODOS os operários executam como se estivessem DENTRO da pasta "{work_dir}".
+1. Se a pasta "{work_dir}" já contém arquivos de um projeto (veja o SNAPSHOT acima, ex: index.html, app.js, style.css), TODAS AS TAREFAS DEVEM INTEGRAR E MODIFICAR CÓDIGO DIRETAMENTE NESSES ARQUIVOS EXISTENTES.
+2. O título e a instrução de cada tarefa DEVEM especificar o caminho do arquivo relativo a "{work_dir}" (ex: `index.html`, `app.js`, `style.css`, `games/dodge.js`).
+3. NUNCA crie tarefas soltas ou com nomes genéricos sem ligar o novo recurso aos arquivos principais do projeto (`index.html`, `app.js`).
 
 REGRAS:
 1. PARALELISMO MÁXIMO: `depends_on: []` sempre que possível.
 2. Tarefas de frontend devem ter `provider: "nvidia"` e `layer: "frontend"`.
 3. Tarefas de backend devem ter `provider: "nvidia"` e `layer: "backend"`.
-4. Cada instrução deve citar o diretório de trabalho: `{work_dir}` e o arquivo exato a ser editado ou criado.
+4. Cada instrução deve citar a pasta de trabalho: `{work_dir}` e o arquivo exato a ser editado.
 5. Retorne APENAS JSON válido sem markdown adicional.
 
 FORMATO DE SAÍDA:
@@ -72,8 +73,8 @@ FORMATO DE SAÍDA:
   "tasks": [
     {{
       "id": 1,
-      "title": "string incluindo caminho (ex: Editar index.html para incluir botão)",
-      "instruction": "string detalhada incluindo caminho exato do arquivo e o que deve ser feito",
+      "title": "string incluindo o arquivo exato (ex: Modificar index.html para adicionar card do novo jogo)",
+      "instruction": "string detalhada incluindo o caminho do arquivo dentro de {work_dir} e a modificação exata",
       "complexity": "alta|media|baixa",
       "layer": "backend|frontend|infra",
       "provider": "nvidia",
