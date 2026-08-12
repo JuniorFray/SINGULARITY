@@ -56,13 +56,13 @@ INSTRUÇÕES:
 Você é o Gerente de Projetos Técnico. Analise a arquitetura acima e o código atual do projeto.
 Gere a lista COMPLETA de subtarefas técnicas atômicas para execução pelos operários.
 Cada subtarefa deve ser autossuficiente e independente o suficiente para ser executada isoladamente.
-Inclua sempre o caminho exato dos arquivos a serem criados ou modificados.
+OBRIGATÓRIO: O título e a instrução de cada tarefa DEVEM conter o caminho exato do arquivo (ex: `games/optionA/optionA.html`, `index.html`, `app.js`).
 
 REGRAS:
 1. PARALELISMO MÁXIMO: `depends_on: []` sempre que possível.
 2. Tarefas de frontend devem ter `provider: "nvidia"` e `layer: "frontend"`.
 3. Tarefas de backend devem ter `provider: "nvidia"` e `layer: "backend"`.
-4. Cada instrução deve citar o diretório de trabalho: `{work_dir}`.
+4. Cada instrução deve citar o diretório de trabalho: `{work_dir}` e o arquivo exato a ser editado ou criado.
 5. Retorne APENAS JSON válido sem markdown adicional.
 
 FORMATO DE SAÍDA:
@@ -72,8 +72,8 @@ FORMATO DE SAÍDA:
   "tasks": [
     {{
       "id": 1,
-      "title": "string",
-      "instruction": "string detalhada incluindo caminho do arquivo e o que deve ser feito",
+      "title": "string incluindo caminho (ex: Editar index.html para incluir botão)",
+      "instruction": "string detalhada incluindo caminho exato do arquivo e o que deve ser feito",
       "complexity": "alta|media|baixa",
       "layer": "backend|frontend|infra",
       "provider": "nvidia",
