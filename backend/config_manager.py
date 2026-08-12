@@ -19,8 +19,8 @@ class SettingsConfig(BaseModel):
     skip_permissions: bool = True
     auto_rotate_quota: bool = True
     max_workers: int = 2
-    default_provider: str = "antigravity"
-    default_model: str = "Claude Sonnet 4.6 (Thinking)"
+    default_provider: str = "nvidia"
+    default_model: str = "meta/llama-3.1-8b-instruct"
     active_work_dir: str = "D:\\APP android teste"
     # Camada 2: Gerencial (NVIDIA NIM) — contexto longo + raciocínio
     layer2_model: str = "meta/llama-3.3-70b-instruct"

@@ -97,6 +97,44 @@ class TaskWorker:
 
         exec_cwd = work_dir if (work_dir and os.path.exists(work_dir)) else None
 
+        # ─── EXECUÇÃO DIRETA VIA NVIDIA NIM API (HTTP) ──────────────────────
+        if provider_config.id == "nvidia" or provider_id == "nvidia":
+            from backend.nvidia_router import nvidia_router
+            keys = config_manager.get_nvidia_keys()
+            if keys:
+                nvidia_router.update_keys(keys)
+                await self.broadcast_log(f"🟢 [NVIDIA NIM API] Executando via API HTTP ({modelo_selecionado})...", "info")
+                try:
+                    res_text = await nvidia_router.execute(
+                        model_pipeline=[modelo_selecionado, settings.layer3_fallback_model, "meta/llama-3.1-8b-instruct"],
+                        messages=[
+                            {"role": "system", "content": "Você é um operário técnico especialista. Execute a instrução diretamente."},
+                            {"role": "user", "content": final_instruction}
+                        ],
+                        temperature=0.2,
+                        broadcaster_fn=self.broadcaster_fn
+                    )
+                    await self.broadcast_log(res_text, "stdout")
+                    await self.broadcast_log(f"✅ Tarefa #{task_id} concluída via NVIDIA NIM API!", "success")
+                    self.is_busy = False
+                    await self.broadcast_status()
+                    return {
+                        "task_id": task_id,
+                        "status": "success",
+                        "output": res_text,
+                        "attempts": 1,
+                        "worker_id": self.worker_id,
+                        "provider_id": "nvidia",
+                        "profile_name": "NVIDIA Pool",
+                        "model": modelo_selecionado,
+                        "use_caveman": settings.use_caveman,
+                        "use_rtk": settings.use_rtk,
+                        "approx_tokens": int(len(res_text) / 4),
+                        "tokens_saved": 0
+                    }
+                except Exception as ne:
+                    await self.broadcast_log(f"⚠️ [NVIDIA NIM] Erro: {ne}", "warning")
+
         while attempt < total_attempts:
             attempt += 1
             await self.broadcast_status()
@@ -185,8 +223,6 @@ class TaskWorker:
                 returncode, stdout_text, stderr_text = await asyncio.to_thread(run_sync_process)
                 full_output = stdout_text + "\n" + stderr_text
 
-
-
                 is_quota_error = any(kw in full_output.lower() for kw in [
                     "quota", "rate limit", "429", "resource_exhausted", 
                     "limit reached", "invalid model", "not recognized", "timeout waiting",
@@ -195,6 +231,42 @@ class TaskWorker:
 
                 if is_quota_error or returncode != 0:
                     await self.broadcast_log(f"⚠️ [Aviso] Limite de cota ou erro detectado na tentativa {attempt}.", "warning")
+
+                    # Fallback Inteligente para NVIDIA NIM após 2 falhas na CLI
+                    if attempt >= 2 and config_manager.get_nvidia_keys():
+                        await self.broadcast_log("🔄 [Failover Inteligente] Alternando para a API NVIDIA NIM devido a limites na CLI...", "warning")
+                        try:
+                            from backend.nvidia_router import nvidia_router
+                            nvidia_router.update_keys(config_manager.get_nvidia_keys())
+                            res_text = await nvidia_router.execute(
+                                model_pipeline=[settings.layer3_model, settings.layer3_fallback_model, "meta/llama-3.1-8b-instruct"],
+                                messages=[
+                                    {"role": "system", "content": "Você é um operário técnico especialista. Execute a instrução diretamente."},
+                                    {"role": "user", "content": final_instruction}
+                                ],
+                                temperature=0.2,
+                                broadcaster_fn=self.broadcaster_fn
+                            )
+                            await self.broadcast_log(res_text, "stdout")
+                            await self.broadcast_log(f"✅ Tarefa #{task_id} concluída com sucesso via NVIDIA NIM (Fallback)! ", "success")
+                            self.is_busy = False
+                            await self.broadcast_status()
+                            return {
+                                "task_id": task_id,
+                                "status": "success",
+                                "output": res_text,
+                                "attempts": attempt,
+                                "worker_id": self.worker_id,
+                                "provider_id": "nvidia",
+                                "profile_name": "NVIDIA Fallback",
+                                "model": settings.layer3_model,
+                                "use_caveman": settings.use_caveman,
+                                "use_rtk": settings.use_rtk,
+                                "approx_tokens": int(len(res_text) / 4),
+                                "tokens_saved": 0
+                            }
+                        except Exception as ne:
+                            await self.broadcast_log(f"⚠️ [Fallback NVIDIA] Erro: {ne}", "warning")
 
                     if settings.auto_rotate_quota:
                         if models and modelo_selecionado in models:

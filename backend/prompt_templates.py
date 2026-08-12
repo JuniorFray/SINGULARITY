@@ -60,8 +60,8 @@ Inclua sempre o caminho exato dos arquivos a serem criados ou modificados.
 
 REGRAS:
 1. PARALELISMO MÁXIMO: `depends_on: []` sempre que possível.
-2. Tarefas de frontend devem ter `provider: "antigravity"` e `layer: "frontend"`.
-3. Tarefas de backend devem ter `provider: "antigravity"` e `layer: "backend"`.
+2. Tarefas de frontend devem ter `provider: "nvidia"` e `layer: "frontend"`.
+3. Tarefas de backend devem ter `provider: "nvidia"` e `layer: "backend"`.
 4. Cada instrução deve citar o diretório de trabalho: `{work_dir}`.
 5. Retorne APENAS JSON válido sem markdown adicional.
 
@@ -76,7 +76,7 @@ FORMATO DE SAÍDA:
       "instruction": "string detalhada incluindo caminho do arquivo e o que deve ser feito",
       "complexity": "alta|media|baixa",
       "layer": "backend|frontend|infra",
-      "provider": "antigravity",
+      "provider": "nvidia",
       "depends_on": []
     }}
   ]
@@ -110,7 +110,7 @@ DIRETÓRIO ATUAL DE TRABALHO:
 
 REGRAS PARA A DECOMPOSIÇÃO:
 1. PARALELISMO MÁXIMO: Crie tarefas independentes sem bloqueios e sem dependências (depends_on: []) sempre que possível, para permitir a execução SIMULTÂNEA de múltiplos operários técnicos ao mesmo tempo.
-2. PROVEDOR PRINCIPAL: Defina sempre o provedor "antigravity" para a execução das tarefas.
+2. PROVEDOR PRINCIPAL: Defina o provedor "nvidia" para a execução das tarefas operárias.
 3. Cada tarefa deve ter uma instrução clara, detalhada, autossuficiente e incluir o diretório de trabalho '{work_dir}'.
 4. Defina a complexidade de cada tarefa ("alta", "media", "baixa").
 5. Apenas adicione dependências (depends_on) quando estritamente necessário (ex: leitor precisa que o arquivo seja criado primeiro).
@@ -126,7 +126,7 @@ ATENÇÃO: Retorne APENAS um objeto JSON válido no seguinte formato estrito:
       "title": "Título curto da tarefa",
       "instruction": "Instrução exata do que o operário deve fazer no terminal",
       "complexity": "alta",
-      "provider": "antigravity",
+      "provider": "nvidia",
       "depends_on": []
     }},
     {{
