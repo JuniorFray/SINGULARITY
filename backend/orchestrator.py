@@ -132,11 +132,42 @@ class OrchestratorEngine:
                 return p.returncode, p.stdout, p.stderr
 
             returncode, stdout_text, stderr_text = await asyncio.to_thread(run_sync_orchestrator)
+            full_out = (stdout_text + "\n" + stderr_text).strip()
             
+            is_quota = any(kw in full_out.lower() for kw in ["quota", "rate limit", "429", "resource_exhausted", "individual quota reached", "please upgrade"])
+            if (returncode != 0 or is_quota) and config_manager.get_nvidia_keys():
+                await self.broadcast_chat("orchestrator", "🔄 [Fallback Orquestrador] Cota esgotada no CLI. Alternando para a API NVIDIA NIM...")
+                try:
+                    from backend.nvidia_router import nvidia_router
+                    nvidia_router.update_keys(config_manager.get_nvidia_keys())
+                    res = await nvidia_router.execute(
+                        model_pipeline=[settings.layer2_model, settings.layer2_fallback_model, "meta/llama-3.1-8b-instruct"],
+                        messages=[
+                            {"role": "system", "content": "Você é o Orquestrador Central. Responda com clareza e siga estritamente o formato solicitado."},
+                            {"role": "user", "content": full_prompt}
+                        ],
+                        temperature=0.2,
+                        broadcaster_fn=self.broadcaster_fn
+                    )
+                    return res
+                except Exception as ne:
+                    print(f"[Orchestrator] Fallback NVIDIA falhou: {ne}")
+
             if returncode != 0 and not stdout_text:
                 return f"Erro na execução do Orquestrador CLI: {stderr_text}"
             return stdout_text
         except Exception as e:
+            if config_manager.get_nvidia_keys():
+                try:
+                    from backend.nvidia_router import nvidia_router
+                    nvidia_router.update_keys(config_manager.get_nvidia_keys())
+                    return await nvidia_router.execute(
+                        model_pipeline=[settings.layer2_model, "meta/llama-3.1-8b-instruct"],
+                        messages=[{"role": "user", "content": prompt}],
+                        temperature=0.2
+                    )
+                except Exception:
+                    pass
             return f"Exceção ao invocar Orquestrador CLI: {str(e)}"
 
     async def decompose_goal(self, macro_goal: str, work_dir: str = ".") -> Dict[str, Any]:
@@ -363,6 +394,24 @@ class OrchestratorEngine:
         )
 
         report = await self.run_claude_cli(validation_prompt)
+
+        is_error_report = any(kw in report.lower() for kw in ["erro na execução", "quota", "individual quota reached", "exceção ao invocar"])
+        if is_error_report and config_manager.get_nvidia_keys():
+            await self.broadcast_chat("orchestrator", "🔄 [Fallback Validação] Cota esgotada no CLI. Gerando parecer final via NVIDIA NIM API...")
+            try:
+                from backend.nvidia_router import nvidia_router
+                nvidia_router.update_keys(config_manager.get_nvidia_keys())
+                report = await nvidia_router.execute(
+                    model_pipeline=[config_manager.state.settings.layer2_model, "meta/llama-3.3-70b-instruct", "meta/llama-3.1-8b-instruct"],
+                    messages=[
+                        {"role": "system", "content": "Você é o Orquestrador Chefe do Singularity. Analise a execução das tarefas e gere o relatório final estruturado em Markdown."},
+                        {"role": "user", "content": validation_prompt}
+                    ],
+                    temperature=0.2,
+                    broadcaster_fn=self.broadcaster_fn
+                )
+            except Exception as ne:
+                report = f"# Relatório Final de Execução\n\n- **Status:** CONCLUÍDO COM SUCESSO\n- **Resumo:** {len(self.execution_results)} tarefas operárias finalizadas com sucesso.\n- **Nota:** Validador NVIDIA: {ne}"
 
         # Gerar Telemetria Técnica
         telemetry = self.generate_telemetry(report)

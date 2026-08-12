@@ -1,0 +1,42 @@
+{
+  "total_tasks": 2,
+  "profiles_used": [
+    "NVIDIA Fallback",
+    "perfil_secundario"
+  ],
+  "models_used": [
+    "meta/llama-3.1-8b-instruct",
+    "Gemini 3.1 Pro (High)"
+  ],
+  "total_tokens_approx": 496,
+  "total_tokens_saved": 135,
+  "task_details": [
+    {
+      "task_id": 4,
+      "title": "Revisar e corrigir hitboxes de colisão",
+      "worker_id": "Worker-1",
+      "provider_id": "antigravity",
+      "profile_name": "perfil_secundario",
+      "model": "Gemini 3.1 Pro (High)",
+      "use_caveman": true,
+      "use_rtk": true,
+      "status": "success",
+      "approx_tokens": 387,
+      "tokens_saved": 135
+    },
+    {
+      "task_id": 5,
+      "title": "Teste e validação de balanceamento",
+      "worker_id": "Worker-1",
+      "provider_id": "nvidia",
+      "profile_name": "NVIDIA Fallback",
+      "model": "meta/llama-3.1-8b-instruct",
+      "use_caveman": true,
+      "use_rtk": true,
+      "status": "success",
+      "approx_tokens": 109,
+      "tokens_saved": 0
+    }
+  ],
+  "report_markdown": "Erro na execução do Orquestrador CLI: Error: Individual quota reached. Please upgrade your subscription to increase your limits. Resets in 36m11s.\n"
+}
