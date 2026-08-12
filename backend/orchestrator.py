@@ -172,12 +172,18 @@ class OrchestratorEngine:
 
     async def decompose_goal(self, macro_goal: str, work_dir: str = ".") -> Dict[str, Any]:
         """Fase 1A (Claude) + Fase 1B (DeepSeek-R1): Pipeline de 2 camadas para gerar o plano."""
-        path_match = re.search(r'(?:na pasta|no diretório|em)\s+["\']?([A-Za-z]:\\[^"\'\r\n]+?)["\']?(?:\s|$|\.)', macro_goal, re.IGNORECASE)
-        if path_match:
-            target_path = path_match.group(1).strip()
-        elif work_dir and work_dir != ".":
+        target_path = None
+        # Procurar caminho entre aspas se fornecido na mensagem
+        quoted_match = re.search(r'["\']([A-Za-z]:\\[^"\']+)["\']', macro_goal)
+        if quoted_match:
+            cand = quoted_match.group(1).strip()
+            if os.path.exists(cand):
+                target_path = cand
+
+        if not target_path and work_dir and work_dir != "." and os.path.exists(work_dir):
             target_path = work_dir
-        else:
+
+        if not target_path:
             target_path = config_manager.state.settings.active_work_dir
 
         self.last_target_dir = target_path

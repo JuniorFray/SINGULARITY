@@ -148,19 +148,29 @@ ATENÇÃO: Retorne APENAS um objeto JSON válido no seguinte formato estrito:
 ```
 """
 
-VALIDATION_PROMPT = """Você é o Claude Chefe. Os operários técnicos finalizaram a execução das tarefas no terminal.
-Analise os relatórios de execução de cada operário para o objetivo macro abaixo.
+VALIDATION_PROMPT = """Você é o Orquestrador Chefe do Singularity. Os operários técnicos finalizaram as tarefas no sistema.
+Analise estritamente o histórico real de execução abaixo.
 
 OBJETIVO MACRO ORIGINAL:
 "{macro_goal}"
 
-RELATÓRIOS DAS TAREFAS EXECUTADAS:
+RELATÓRIOS REAIS DE EXECUÇÃO:
 {worker_outputs}
 
-Sua missão:
-1. Avaliar se o objetivo macro foi concluído com sucesso.
-2. Identificar se houve erros ou se algum arquivo importante precisa de ajustes.
-3. Gerar um relatório final de encerramento detalhando as alterações aplicadas.
+REGRAS RÍGIDAS DE VALIDAÇÃO:
+1. Baseie-se APENAS nos relatórios reais de execução acima. NUNCA invente ou alucine arquivos Android fictícios (como AndroidManifest.xml ou strings.xml) que não existam no projeto.
+2. Se as tarefas operárias foram executadas com sucesso, declare o status "CONCLUÍDO COM SUCESSO" e liste os arquivos reais que foram alterados.
+3. Se houver erro real relatado no terminal, declare "NECESSITA DE CORREÇÃO" e indique apenas as falhas reais.
 
-Retorne o relatório em Markdown com títulos claros, lista de arquivos alterados e status final ("CONCLUÍDO COM SUCESSO" ou "NECESSITA DE CORREÇÃO").
+FORMATO DE SAÍDA MARKDOWN:
+# Relatório Final de Encerramento
+
+## Status
+CONCLUÍDO COM SUCESSO
+
+## Resumo da Execução
+[Resumo em 3 linhas das alterações efetuadas]
+
+## Arquivos Alterados
+- [Lista dos arquivos realmente modificados]
 """
