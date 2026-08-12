@@ -70,10 +70,14 @@ def apply_ai_output_to_filesystem(title: str, instruction: str, output_text: str
             target_from_instruction = os.path.join(work_dir, "style.css")
 
     # 3. Processar blocos de código ```lang ... ```
-    code_blocks = re.findall(r'```(?:[a-zA-Z0-9_\-]+)?\s*\n(.*?)\n```', output_text, re.DOTALL)
-    for block in code_blocks:
+    code_blocks = re.findall(r'```([a-zA-Z0-9_\-]+)?\s*\n(.*?)\n```', output_text, re.DOTALL)
+    for lang, block in code_blocks:
         code_content = block.strip()
-        if not code_content or code_content.startswith("mkdir"):
+        lang_str = (lang or "").lower()
+        # Ignorar blocos de terminal/bash para não sobrescrever código com comandos de shell
+        if lang_str in ["bash", "sh", "shell", "powershell", "cmd", "terminal", "zsh", "console"]:
+            continue
+        if not code_content or any(code_content.startswith(cmd) for cmd in ["mkdir", "ls ", "dir ", "cd ", "rm ", "git "]):
             continue
 
         # Procura caminho no comentário da 1ª linha do código
