@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Singularity - Multi-Agent AI Orchestrator</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body class="dark-theme">
+    <div class="app-container">
+        <!-- HEADER / NAVBAR -->
+        <header class="app-header">
+            <div class="logo-area">
+                <div class="logo-icon">🪐</div>
+                <div class="logo-text">
+                    <h1>SINGULARITY <span>ORCHESTRATOR</span></h1>
+                    <span class="subtitle">Multi-Provider AI System</span>
+                </div>
+            </div>
+
+            <!-- TOGGLES DE OTIMIZAÇÃO -->
+            <div class="header-toggles">
+                <div class="toggle-group" title="Bypass automático de permissões nos CLIs">
+                    <label class="switch">
+                        <input type="checkbox" id="toggle-skip-permissions" checked>
+                        <span class="slider round"></span>
+                    </label>
+                    <span class="toggle-label">⚡ Skip Permissions</span>
+                </div>
+
+                <div class="toggle-group" title="Compressão de logs com Rust Token Killer (rtk)">
+                    <label class="switch">
+                        <input type="checkbox" id="toggle-rtk" checked>
+                        <span class="slider round"></span>
+                    </label>
+                    <span class="toggle-label">🛠️ Modo RTK</span>
+                </div>
+
+                <div class="toggle-group" title="Modo Caveman de extrema concisidade">
+                    <label class="switch">
+                        <input type="checkbox" id="toggle-caveman" checked>
+                        <span class="slider round"></span>
+                    </label>
+                    <span class="toggle-label">🦴 Modo Caveman</span>
+                </div>
+
+                <div class="toggle-group" title="Auto-rotação de perfis/modelos em limite de cota">
+                    <label class="switch">
+                        <input type="checkbox" id="toggle-auto-rotate" checked>
+                        <span class="slider round"></span>
+                    </label>
+                    <span class="toggle-label">🔄 Auto-Rotate</span>
+                </div>
+
+                <div class="workers-counter-group" title="Operários concorrentes em paralelo">
+                    <span class="counter-label">👷 Operários:</span>
+                    <button class="btn-step" id="btn-dec-workers">-</button>
+                    <span id="workers-count-val" class="workers-val">2</span>
+                    <button class="btn-step" id="btn-inc-workers">+</button>
+                </div>
+            </div>
+
+            <!-- PROVIDER, PROFILE & TELEMETRY BADGES -->
+            <div class="header-status">
+                <button class="btn btn-sm btn-outline" id="btn-open-diagnostics" title="Testar e Diagnosticar IAs Conectadas">
+                    🩺 Diagnóstico & Testes
+                </button>
+                <button class="btn btn-sm btn-primary" id="btn-open-telemetry" title="Ver Telemetria Técnica, Tokens, Perfis e Relatório Completo">
+                    📊 Telemetria
+                </button>
+                <button class="btn btn-sm btn-outline" id="btn-manage-providers" title="Gerenciar Provedores de IA (Antigravity, Claude, Ollama...)">
+                    🤖 Provedores
+                </button>
+                <div class="profile-badge" id="btn-manage-profiles" title="Clique para gerenciar perfis de contas Google/USERPROFILE">
+                    <span class="icon">👤</span>
+                    <span id="current-profile-name">perfil_primario</span>
+                </div>
+                <div class="status-indicator online" id="ws-status-indicator">
+                    <span class="dot"></span> <span id="ws-status-text">Conectado</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- MAIN LAYOUT -->
+        <main class="app-main">
+            <!-- COLUNA 1: CHAT & PLANEJAMENTO -->
+            <section class="panel panel-left">
+                <div class="panel-header">
+                    <h2>🧠 Claude Orquestrador</h2>
+                    <span class="badge badge-purple">Chefe Central</span>
+                </div>
+                
+                <div class="chat-messages" id="chat-messages">
+                    <div class="chat-bubble system-bubble">
+                        <div class="bubble-title">🪐 Singularity Multi-Agent Ready</div>
+                        <p>Digite o objetivo do seu projeto abaixo. O Claude analisará o escopo em <code>D:\Singularity - Sistema Orquestrador IA</code>, decomporá em tarefas atômicas em JSON e atribuirá aos operários técnicos.</p>
+                    </div>
+                </div>
+
+                <!-- PLAN CARD CONTAINER -->
+                <div class="plan-container hidden" id="plan-container">
+                    <div class="plan-header">
+                        <h3 id="plan-title">Plano do Projeto</h3>
+                        <span class="badge badge-green" id="plan-task-count">0 Tarefas</span>
+                    </div>
+                    <p id="plan-summary" class="plan-summary"></p>
+                    <div class="task-list" id="plan-task-list"></div>
+                    <button class="btn btn-primary btn-block" id="btn-execute-plan">🚀 Executar Plano com Operários</button>
+                </div>
+
+                <!-- INPUT AREA -->
+                <div class="chat-input-area">
+                    <div class="work-dir-bar" style="display: flex; align-items: center; gap: 8px; font-size: 11px;">
+                        <span style="color: var(--text-muted); white-space: nowrap;">📁 Pasta Alvo:</span>
+                        <input type="text" id="work-dir-input" value="D:\APP android teste" style="width: 100%; background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 4px; padding: 4px 8px; color: var(--primary); font-family: var(--font-code); font-size: 11px;">
+                    </div>
+                    <textarea id="prompt-input" placeholder="Digite o escopo ou ajuste do projeto..."></textarea>
+                    <button id="btn-send-prompt" class="btn btn-primary">
+                        <span>Gerar Plano</span> ➔
+                    </button>
+                </div>
+            </section>
+
+            <!-- COLUNA 2: WORKERS GRID & RELATÓRIO DE VALIDAÇÃO -->
+            <section class="panel panel-center">
+                <div class="panel-header">
+                    <h2>👷 Operários Técnicos Multi-IA</h2>
+                    <span class="badge badge-amber" id="active-provider-badge">Antigravity + Claude + Ollama</span>
+                </div>
+
+                <div class="workers-grid" id="workers-grid">
+                    <!-- Cards de workers gerados via JS -->
+                </div>
+
+                <div class="validation-report-panel hidden" id="validation-report-panel">
+                    <div class="panel-header">
+                        <h2>🔍 Parecer Final do Claude Orquestrador</h2>
+                        <button class="btn-close" id="btn-close-report">✕</button>
+                    </div>
+                    <div class="report-content" id="report-content-markdown"></div>
+                </div>
+            </section>
+
+            <!-- COLUNA 3: TERMINAL LOGS -->
+            <section class="panel panel-right">
+                <div class="panel-header">
+                    <h2>💻 Terminal Logs ao Vivo</h2>
+                    <div class="terminal-actions">
+                        <button class="btn btn-sm btn-icon" id="btn-clear-logs" title="Limpar logs">🗑️</button>
+                        <label class="auto-scroll-label"><input type="checkbox" id="chk-auto-scroll" checked> Auto-Scroll</label>
+                    </div>
+                </div>
+                
+                <div class="terminal-body" id="terminal-body">
+                    <div class="log-line info">[SINGULARITY] Sistema inicializado. Aguardando missão...</div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- MODAL DE PROVEDORES DE IA -->
+    <div class="modal-overlay hidden" id="providers-modal">
+        <div class="modal-box">
+            <div class="modal-header">
+                <h3>🤖 Gerenciador de Provedores de IA</h3>
+                <button class="btn-close" id="btn-close-providers-modal">✕</button>
+            </div>
+            <div class="modal-body">
+                <p class="help-text">O Singularity suporta múltiplos executáveis de IA CLI simultâneos. Você pode adicionar ou alterar os provedores abaixo:</p>
+                
+                <div class="providers-list" id="providers-list">
+                    <!-- Lista de provedores injetada via JS -->
+                </div>
+
+                <hr style="border: 0; border-top: 1px solid var(--border-color); margin: 10px 0;">
+                
+                <h4 style="font-size: 13px; color: #76b900;">🔑 Chaves NVIDIA AI (Pool de Rotação Automática)</h4>
+                <p style="font-size: 11px; color: var(--text-muted); margin-bottom: 6px;">Adicione suas chaves <code>nvapi-...</code>. O sistema rotaciona automaticamente ao atingir o limite de 40 RPM.</p>
+                <div id="nvidia-keys-list" style="display: flex; flex-direction: column; gap: 4px; max-height: 120px; overflow-y: auto; margin-bottom: 8px;"></div>
+                <div style="display: flex; gap: 8px;">
+                    <input type="password" id="new-nvidia-key" placeholder="nvapi-..." style="flex: 1; background: var(--card-bg); border: 1px solid #76b90055; border-radius: 6px; padding: 7px 10px; color: white; font-size: 12px; font-family: monospace;">
+                    <button class="btn btn-primary btn-sm" id="btn-add-nvidia-key" style="background: #76b900; border-color: #76b900; white-space: nowrap;">+ Adicionar</button>
+                </div>
+                
+                <h4 style="font-size: 13px; margin-top: 15px;">➕ Adicionar Provedor Customizado</h4>
+                <div class="add-provider-form" style="display: flex; flex-direction: column; gap: 8px; margin-top: 8px;">
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                        <input type="text" id="new-provider-id" placeholder="ID (ex: nvidia)">
+                        <input type="text" id="new-provider-name" placeholder="Nome Exibição (ex: NVIDIA NIM)">
+                    </div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                        <input type="text" id="new-provider-binary" placeholder="Executável CLI (ex: nvidia)">
+                        <input type="text" id="new-provider-default-model" placeholder="Model Padrão (ex: nvidia/llama-3.1-nemotron-70b-instruct)">
+                    </div>
+                    <input type="text" id="new-provider-supported-models" placeholder="Modelos Suportados separados por vírgula (ex: modelo1, modelo2)">
+                    <input type="text" id="new-provider-template" placeholder="Template de comando (ex: {binary} --model &quot;{model}&quot; {flags} -p &quot;{instruction}&quot;)">
+                    <button class="btn btn-primary btn-block" id="btn-add-provider" style="margin-top: 5px;">Cadastrar Provedor</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL DE PERFIS -->
+    <div class="modal-overlay hidden" id="profiles-modal">
+        <div class="modal-box">
+            <div class="modal-header">
+                <h3>👥 Gerenciador de Perfis & Contas Google</h3>
+                <button class="btn-close" id="btn-close-modal">✕</button>
+            </div>
+            <div class="modal-body">
+                <p class="help-text">Perfis isolados de <code>USERPROFILE</code> para contornar limites de cota.</p>
+                <div class="add-profile-form">
+                    <input type="text" id="new-profile-name" placeholder="Nome do perfil (ex: conta_secundaria)">
+                    <button class="btn btn-primary" id="btn-add-profile">Adicionar Perfil</button>
+                </div>
+                <div class="profiles-list" id="profiles-list"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL DE TELEMETRIA E RELATÓRIO TÉCNICO -->
+    <div class="modal-overlay hidden" id="telemetry-modal">
+        <div class="modal-box modal-lg">
+            <div class="modal-header">
+                <h3>📊 Telemetria Técnica & Relatório de Execução</h3>
+                <button class="btn-close" id="btn-close-telemetry">✕</button>
+            </div>
+            <div class="modal-body">
+                <!-- CARDS DE METRICAS CHAVE -->
+                <div class="telemetry-cards-grid">
+                    <div class="metric-card">
+                        <span class="metric-icon">👤</span>
+                        <div class="metric-info">
+                            <span class="metric-label">Perfis / Contas Usadas</span>
+                            <span class="metric-val" id="telemetry-profiles">-</span>
+                        </div>
+                    </div>
+                    <div class="metric-card">
+                        <span class="metric-icon">🤖</span>
+                        <div class="metric-info">
+                            <span class="metric-label">Modelos Utilizados</span>
+                            <span class="metric-val" id="telemetry-models">-</span>
+                        </div>
+                    </div>
+                    <div class="metric-card">
+                        <span class="metric-icon">⚡</span>
+                        <div class="metric-info">
+                            <span class="metric-label">Tokens Processados (Aprox.)</span>
+                            <span class="metric-val" id="telemetry-tokens">0</span>
+                        </div>
+                    </div>
+                    <div class="metric-card">
+                        <span class="metric-icon">🦴</span>
+                        <div class="metric-info">
+                            <span class="metric-label">Tokens Economizados (Caveman)</span>
+                            <span class="metric-val text-green" id="telemetry-saved">0</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="section-title-sm">📋 Detalhamento das Tarefas por Operário</div>
+                <div class="table-responsive">
+                    <table class="telemetry-table">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Tarefa</th>
+                                <th>Operário</th>
+                                <th>Perfil / Conta</th>
+                                <th>Modelo</th>
+                                <th>Otimização</th>
+                                <th>Tokens Est.</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="telemetry-table-body">
+                            <tr><td colspan="8" style="text-align: center; color: var(--text-muted);">Nenhuma execução recente gravada.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="telemetry-actions">
+                    <a href="/api/orchestrator/report-file" target="_blank" class="btn btn-outline" id="btn-download-report">
+                        📄 Baixar Relatório Completo (relatorio_final.md)
+                    </a>
+                </div>
+
+                <div class="section-title-sm">🔍 Conteúdo do Parecer Final (`relatorio_final.md`)</div>
+                <pre class="report-markdown-preview" id="report-markdown-preview">Carregando relatório...</pre>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL DE DIAGNÓSTICO E AUTO-CORREÇÃO DE IAS -->
+    <div class="modal-overlay hidden" id="diagnostics-modal">
+        <div class="modal-box modal-lg">
+            <div class="modal-header">
+                <h3>🩺 Diagnóstico e Conectividade das IAs</h3>
+                <button class="btn-close" id="btn-close-diagnostics">✕</button>
+            </div>
+            <div class="modal-body">
+                <p class="help-text">Verifique se as IAs CLI estão instaladas, configuradas e respondendo corretamente.</p>
+
+                <div class="table-responsive" style="max-height: 250px;">
+                    <table class="telemetry-table">
+                        <thead>
+                            <tr>
+                                <th>Provedor</th>
+                                <th>Executável CLI</th>
+                                <th>Modelo Padrão</th>
+                                <th>Status Conectização</th>
+                                <th>Ação</th>
+                            </tr>
+                        </thead>
+                        <tbody id="diagnostics-table-body">
+                            <tr><td colspan="5" style="text-align: center; color: var(--text-muted);">Clique em 'Executar Testes' para checar a saúde dos provedores.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div style="display: flex; gap: 10px; margin-top: 10px;">
+                    <button class="btn btn-primary" id="btn-run-health-check" style="flex:1;">
+                        🔍 Executar Teste de Conexão em Todas as IAs
+                    </button>
+                    <button class="btn btn-outline" id="btn-run-auto-fix" style="flex:1; border-color: var(--primary); color: var(--primary);">
+                        ⚡ Auto-Corrigir Todos os Erros
+                    </button>
+                </div>
+
+                <div id="diagnostics-log-box" class="report-markdown-preview hidden" style="margin-top: 10px; max-height: 120px; font-size: 11px;"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+</body>
+</html>

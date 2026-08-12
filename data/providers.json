@@ -1,0 +1,49 @@
+{
+  "antigravity": {
+    "id": "antigravity",
+    "name": "Antigravity CLI (agy)",
+    "cli_binary": "agy",
+    "command_template": "{binary} --model=\"{model}\" {flags} -p \"{instruction}\"",
+    "skip_permissions_flag": "--dangerously-skip-permissions",
+    "default_model": "Claude Sonnet 4.6 (Thinking)",
+    "supported_models": [
+      "Claude Sonnet 4.6 (Thinking)",
+      "Gemini 3.1 Pro (High)",
+      "Gemini 3.5 Flash (High)",
+      "Gemini 3.6 Flash (High)",
+      "Claude Opus 4.6 (Thinking)"
+    ],
+    "is_active": true
+  },
+  "claude_code": {
+    "id": "claude_code",
+    "name": "Claude Code CLI (claude)",
+    "cli_binary": "claude",
+    "command_template": "{binary} -p \"{instruction}\" {flags}",
+    "skip_permissions_flag": "--dangerously-skip-permissions",
+    "default_model": "claude-3-7-sonnet",
+    "supported_models": [
+      "claude-3-7-sonnet",
+      "claude-3-5-sonnet",
+      "claude-3-5-haiku"
+    ],
+    "is_active": true
+  },
+  "nvidia": {
+    "id": "nvidia",
+    "name": "NVIDIA AI Foundation / NIM",
+    "cli_binary": "nvidia",
+    "command_template": "{binary} --model=\"{model}\" {flags} -p \"{instruction}\"",
+    "skip_permissions_flag": "",
+    "default_model": "meta/llama-3.1-8b-instruct",
+    "supported_models": [
+      "meta/llama-3.1-8b-instruct",
+      "nvidia/nemotron-3-nano-30b-a3b",
+      "meta/llama-3.3-70b-instruct",
+      "meta/llama-3.1-70b-instruct",
+      "meta/llama-3.2-11b-vision-instruct",
+      "meta/llama-3.2-3b-instruct"
+    ],
+    "is_active": true
+  }
+}

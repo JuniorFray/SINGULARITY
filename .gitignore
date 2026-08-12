@@ -1,0 +1,26 @@
+# Python / Ambiente
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+pip-log.txt
+
+# Dados sensíveis e estado local (Chaves API, Perfis e Histórico)
+data/nvidia_keys.json
+data/orchestrator_config.json
+data/current_plan.json
+data/chat_history.json
+
+# IDE / Editores
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs & Scratch
+scratch/
+*.log
