@@ -112,6 +112,7 @@ document.addEventListener('DOMContentLoaded', () => {
             case 'plan_ready':
                 currentPlan = data.plan;
                 renderPlan(data.plan);
+                showPlanReadyAlert();
                 break;
 
             case 'terminal_log':
@@ -262,8 +263,34 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    function showPlanReadyAlert() {
+        // Alerta inline acima do botão
+        const alert = document.getElementById('execute-ready-alert');
+        if (alert) {
+            alert.classList.remove('hidden');
+        }
+        // Toast flutuante no canto
+        const toast = document.getElementById('toast-ready');
+        if (toast) {
+            toast.classList.remove('hidden');
+            // Auto-fechar após 8 segundos
+            setTimeout(() => toast.classList.add('hidden'), 8000);
+        }
+        // Pulsar o botão
+        if (btnExecutePlan) {
+            btnExecutePlan.style.animation = 'none';
+            btnExecutePlan.style.boxShadow = '0 0 20px rgba(139,92,246,0.8), 0 0 40px rgba(139,92,246,0.4)';
+            setTimeout(() => { btnExecutePlan.style.boxShadow = ''; }, 8000);
+        }
+    }
+
     btnExecutePlan.addEventListener('click', () => {
         if (!currentPlan) return;
+        // Fechar alertas ao iniciar
+        const alert = document.getElementById('execute-ready-alert');
+        if (alert) alert.classList.add('hidden');
+        const toast = document.getElementById('toast-ready');
+        if (toast) toast.classList.add('hidden');
         if (ws && ws.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify({
                 type: 'start_execution',
@@ -343,7 +370,25 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    btnClearLogs.addEventListener('click', () => terminalBody.innerHTML = '');
+    btnClearLogs.addEventListener('click', () => {
+        terminalBody.innerHTML = '<div class="log-line info">[TERMINAL] Logs limpos.</div>';
+    });
+
+    // Limpar tudo: terminal + chat + plano
+    const btnClearAll = document.getElementById('btn-clear-all');
+    if (btnClearAll) {
+        btnClearAll.addEventListener('click', () => {
+            if (!confirm('Limpar terminal, chat e plano atual? Isso não afeta os arquivos do projeto.')) return;
+            terminalBody.innerHTML = '<div class="log-line info">[SINGULARITY] Sistema reiniciado. Aguardando nova missão...</div>';
+            chatMessages.innerHTML = '<div class="chat-bubble system-bubble"><div class="bubble-title">🪐 Singularity Multi-Agent Ready</div><p>Sistema reiniciado. Pronto para nova missão.</p></div>';
+            planContainer.classList.add('hidden');
+            currentPlan = null;
+            const alert = document.getElementById('execute-ready-alert');
+            if (alert) alert.classList.add('hidden');
+            const toast = document.getElementById('toast-ready');
+            if (toast) toast.classList.add('hidden');
+        });
+    }
 
     // Modais
     btnManageProfiles.addEventListener('click', () => {

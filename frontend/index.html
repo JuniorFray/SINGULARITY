@@ -109,6 +109,9 @@
                     </div>
                     <p id="plan-summary" class="plan-summary"></p>
                     <div class="task-list" id="plan-task-list"></div>
+                    <div class="execute-ready-alert" id="execute-ready-alert">
+                        <span class="alert-pulse">●</span> Plano pronto! Clique em Executar para iniciar os operários.
+                    </div>
                     <button class="btn btn-primary btn-block" id="btn-execute-plan">🚀 Executar Plano com Operários</button>
                 </div>
 
@@ -150,7 +153,8 @@
                 <div class="panel-header">
                     <h2>💻 Terminal Logs ao Vivo</h2>
                     <div class="terminal-actions">
-                        <button class="btn btn-sm btn-icon" id="btn-clear-logs" title="Limpar logs">🗑️</button>
+                        <button class="btn btn-sm btn-icon" id="btn-clear-logs" title="Limpar apenas os logs do terminal">🗑️ Limpar Logs</button>
+                        <button class="btn btn-sm btn-icon" id="btn-clear-all" title="Limpar terminal + chat + plano para iniciar do zero" style="background: rgba(255,59,59,0.15); border-color: rgba(255,59,59,0.4); color: #ff6b6b;">🧹 Limpar Tudo</button>
                         <label class="auto-scroll-label"><input type="checkbox" id="chk-auto-scroll" checked> Auto-Scroll</label>
                     </div>
                 </div>
@@ -160,6 +164,13 @@
                 </div>
             </section>
         </main>
+    </div>
+
+    <!-- TOAST DE NOTIFICAÇÃO -->
+    <div id="toast-ready" class="toast-ready hidden">
+        <span class="toast-icon">🚀</span>
+        <span class="toast-msg">Plano pronto! Clique em <strong>Executar Plano com Operários</strong></span>
+        <button class="toast-close" onclick="document.getElementById('toast-ready').classList.add('hidden')">✕</button>
     </div>
 
     <!-- MODAL DE PROVEDORES DE IA -->

@@ -674,4 +674,89 @@ input:checked + .slider:before {
     color: #e5e7eb;
 }
 
+/* ── EXECUTE READY ALERT (inline no plano) ──────────────── */
+.execute-ready-alert {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(138, 92, 246, 0.12);
+    border: 1px solid rgba(138, 92, 246, 0.45);
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: 12px;
+    color: #c4b5fd;
+    margin-bottom: 10px;
+    animation: alert-slide-in 0.4s ease;
+}
+
+@keyframes alert-slide-in {
+    from { opacity: 0; transform: translateY(-6px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+.alert-pulse {
+    color: #a78bfa;
+    font-size: 10px;
+    animation: pulse-dot 1.2s ease-in-out infinite;
+}
+
+@keyframes pulse-dot {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50%       { opacity: 0.4; transform: scale(1.5); }
+}
+
+/* ── TOAST DE NOTIFICAÇÃO (canto inferior esquerdo) ──────── */
+.toast-ready {
+    position: fixed;
+    bottom: 28px;
+    left: 28px;
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: rgba(17, 10, 40, 0.95);
+    border: 1px solid rgba(138, 92, 246, 0.7);
+    box-shadow: 0 0 24px rgba(138, 92, 246, 0.35), 0 8px 24px rgba(0,0,0,0.6);
+    border-radius: 12px;
+    padding: 14px 18px;
+    font-size: 13px;
+    color: #e9d5ff;
+    max-width: 380px;
+    animation: toast-in 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes toast-in {
+    from { opacity: 0; transform: translateY(20px) scale(0.95); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.toast-icon {
+    font-size: 1.4rem;
+    animation: bounce-icon 1s ease infinite alternate;
+}
+
+@keyframes bounce-icon {
+    from { transform: translateY(0); }
+    to   { transform: translateY(-4px); }
+}
+
+.toast-msg strong {
+    color: #a78bfa;
+}
+
+.toast-close {
+    background: transparent;
+    border: none;
+    color: rgba(255,255,255,0.4);
+    cursor: pointer;
+    font-size: 14px;
+    padding: 0 0 0 8px;
+    margin-left: auto;
+    transition: color 0.2s;
+}
+
+.toast-close:hover {
+    color: rgba(255,255,255,0.8);
+}
+
 .hidden { display: none !important; }
