@@ -15,6 +15,72 @@ from backend.config_manager import config_manager
 from backend.ai_providers import provider_registry
 from backend.prompt_templates import CAVEMAN_PROMPT
 
+def apply_ai_output_to_filesystem(title: str, instruction: str, output_text: str, work_dir: str) -> List[str]:
+    """
+    Analisa a resposta do modelo IA (NVIDIA NIM API) e aplica fisicamente
+    as alterações (criação de pastas, escrita/edição de arquivos) no disco.
+    Retorna a lista de arquivos afetados.
+    """
+    if not work_dir:
+        return []
+
+    import re
+    affected_files = []
+
+    # 1. Processar comandos `mkdir`
+    mkdir_matches = re.findall(r'mkdir\s+(?:-p\s+)?["\']?([A-Za-z]:\\[^"\'\r\n]+|[\w\-\.\/\\]+)["\']?', output_text, re.IGNORECASE)
+    for folder in mkdir_matches:
+        folder_path = folder.strip()
+        if not os.path.isabs(folder_path):
+            folder_path = os.path.join(work_dir, folder_path)
+        try:
+            os.makedirs(folder_path, exist_ok=True)
+            print(f"[Worker FileSystem] Pasta criada: {folder_path}")
+        except Exception as e:
+            print(f"[Worker FileSystem] Erro ao criar pasta {folder_path}: {e}")
+
+    # 2. Detectar arquivo alvo da instrução ou título
+    target_from_instruction = None
+    file_match = re.search(r'([a-zA-Z0-9_\-\/\\]+\.(?:html|css|js|json|py|md|ts))', instruction + " " + title, re.IGNORECASE)
+    if file_match:
+        cand = file_match.group(1).strip()
+        if os.path.isabs(cand):
+            target_from_instruction = cand
+        else:
+            target_from_instruction = os.path.join(work_dir, cand)
+
+    # 3. Processar blocos de código ```lang ... ```
+    code_blocks = re.findall(r'```(?:[a-zA-Z0-9_\-]+)?\s*\n(.*?)\n```', output_text, re.DOTALL)
+    for block in code_blocks:
+        code_content = block.strip()
+        if not code_content or code_content.startswith("mkdir"):
+            continue
+
+        # Procura caminho no comentário da 1ª linha do código
+        path_header_match = re.search(r'^(?://|/\*|<!--|#)\s*([A-Za-z]:\\[^\r\n]+|[\w\-\.\/\\]+\.(?:html|css|js|json|py|md|ts))', code_content)
+        
+        target_path = None
+        if path_header_match:
+            cand = path_header_match.group(1).strip()
+            if os.path.isabs(cand):
+                target_path = cand
+            else:
+                target_path = os.path.join(work_dir, cand)
+        elif target_from_instruction:
+            target_path = target_from_instruction
+
+        if target_path:
+            try:
+                os.makedirs(os.path.dirname(target_path), exist_ok=True)
+                with open(target_path, "w", encoding="utf-8") as f:
+                    f.write(code_content)
+                affected_files.append(target_path)
+                print(f"[Worker FileSystem] Arquivo gravado com sucesso: {target_path}")
+            except Exception as e:
+                print(f"[Worker FileSystem] Erro ao gravar {target_path}: {e}")
+
+    return affected_files
+
 class TaskWorker:
     def __init__(self, worker_id: str, broadcaster_fn: Optional[Callable] = None):
         self.worker_id = worker_id
@@ -95,7 +161,8 @@ class TaskWorker:
             final_instruction = f"{CAVEMAN_PROMPT}\n\nTAREFA: {instrucao}"
             await self.broadcast_log("🦴 [Otimização] Modo Caveman aplicado ao prompt.")
 
-        exec_cwd = work_dir if (work_dir and os.path.exists(work_dir)) else None
+        target_dir = work_dir if (work_dir and os.path.exists(work_dir)) else config_manager.state.settings.active_work_dir
+        exec_cwd = target_dir if (target_dir and os.path.exists(target_dir)) else None
 
         # ─── EXECUÇÃO DIRETA VIA NVIDIA NIM API (HTTP) ──────────────────────
         if provider_config.id == "nvidia" or provider_id == "nvidia":
@@ -115,6 +182,12 @@ class TaskWorker:
                         broadcaster_fn=self.broadcaster_fn
                     )
                     await self.broadcast_log(res_text, "stdout")
+                    
+                    # Aplicar alterações no sistema de arquivos
+                    affected = apply_ai_output_to_filesystem(title, instrucao, res_text, target_dir)
+                    if affected:
+                        await self.broadcast_log(f"📁 [FileSystem] {len(affected)} arquivo(s) gravado(s) em '{target_dir}'.", "info")
+
                     await self.broadcast_log(f"✅ Tarefa #{task_id} concluída via NVIDIA NIM API!", "success")
                     self.is_busy = False
                     await self.broadcast_status()
@@ -248,6 +321,11 @@ class TaskWorker:
                                 broadcaster_fn=self.broadcaster_fn
                             )
                             await self.broadcast_log(res_text, "stdout")
+                            
+                            affected = apply_ai_output_to_filesystem(title, instrucao, res_text, target_dir)
+                            if affected:
+                                await self.broadcast_log(f"📁 [FileSystem] {len(affected)} arquivo(s) gravado(s) em '{target_dir}'.", "info")
+
                             await self.broadcast_log(f"✅ Tarefa #{task_id} concluída com sucesso via NVIDIA NIM (Fallback)! ", "success")
                             self.is_busy = False
                             await self.broadcast_status()

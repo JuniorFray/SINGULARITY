@@ -1,42 +1,184 @@
 {
-  "total_tasks": 2,
+  "total_tasks": 13,
   "profiles_used": [
-    "NVIDIA Fallback",
-    "perfil_secundario"
+    "NVIDIA Pool"
   ],
   "models_used": [
-    "meta/llama-3.1-8b-instruct",
-    "Gemini 3.1 Pro (High)"
+    "meta/llama-3.2-3b-instruct",
+    "nvidia/nemotron-3-nano-30b-a3b"
   ],
-  "total_tokens_approx": 496,
-  "total_tokens_saved": 135,
+  "total_tokens_approx": 1926,
+  "total_tokens_saved": 0,
   "task_details": [
     {
-      "task_id": 4,
-      "title": "Revisar e corrigir hitboxes de colisão",
+      "task_id": 1,
+      "title": "Create GameOptionA directory",
       "worker_id": "Worker-1",
-      "provider_id": "antigravity",
-      "profile_name": "perfil_secundario",
-      "model": "Gemini 3.1 Pro (High)",
+      "provider_id": "nvidia",
+      "profile_name": "NVIDIA Pool",
+      "model": "meta/llama-3.2-3b-instruct",
       "use_caveman": true,
       "use_rtk": true,
       "status": "success",
-      "approx_tokens": 387,
-      "tokens_saved": 135
+      "approx_tokens": 10,
+      "tokens_saved": 0
+    },
+    {
+      "task_id": 6,
+      "title": "Create GameOptionB directory",
+      "worker_id": "Worker-1",
+      "provider_id": "nvidia",
+      "profile_name": "NVIDIA Pool",
+      "model": "meta/llama-3.2-3b-instruct",
+      "use_caveman": true,
+      "use_rtk": true,
+      "status": "success",
+      "approx_tokens": 10,
+      "tokens_saved": 0
+    },
+    {
+      "task_id": 7,
+      "title": "Create GameOptionB HTML file",
+      "worker_id": "Worker-1",
+      "provider_id": "nvidia",
+      "profile_name": "NVIDIA Pool",
+      "model": "meta/llama-3.2-3b-instruct",
+      "use_caveman": true,
+      "use_rtk": true,
+      "status": "success",
+      "approx_tokens": 171,
+      "tokens_saved": 0
+    },
+    {
+      "task_id": 3,
+      "title": "Create GameOptionA CSS file",
+      "worker_id": "Worker-1",
+      "provider_id": "nvidia",
+      "profile_name": "NVIDIA Pool",
+      "model": "meta/llama-3.2-3b-instruct",
+      "use_caveman": true,
+      "use_rtk": true,
+      "status": "success",
+      "approx_tokens": 179,
+      "tokens_saved": 0
+    },
+    {
+      "task_id": 11,
+      "title": "Add screen definitions for OptionA and OptionB in app.js",
+      "worker_id": "Worker-1",
+      "provider_id": "nvidia",
+      "profile_name": "NVIDIA Pool",
+      "model": "nvidia/nemotron-3-nano-30b-a3b",
+      "use_caveman": true,
+      "use_rtk": true,
+      "status": "success",
+      "approx_tokens": 29,
+      "tokens_saved": 0
+    },
+    {
+      "task_id": 8,
+      "title": "Create GameOptionB CSS file",
+      "worker_id": "Worker-1",
+      "provider_id": "nvidia",
+      "profile_name": "NVIDIA Pool",
+      "model": "meta/llama-3.2-3b-instruct",
+      "use_caveman": true,
+      "use_rtk": true,
+      "status": "success",
+      "approx_tokens": 201,
+      "tokens_saved": 0
     },
     {
       "task_id": 5,
-      "title": "Teste e validação de balanceamento",
+      "title": "Add GameOptionA navigation button to hub",
       "worker_id": "Worker-1",
       "provider_id": "nvidia",
-      "profile_name": "NVIDIA Fallback",
-      "model": "meta/llama-3.1-8b-instruct",
+      "profile_name": "NVIDIA Pool",
+      "model": "nvidia/nemotron-3-nano-30b-a3b",
       "use_caveman": true,
       "use_rtk": true,
       "status": "success",
-      "approx_tokens": 109,
+      "approx_tokens": 24,
+      "tokens_saved": 0
+    },
+    {
+      "task_id": 2,
+      "title": "Create GameOptionA HTML file",
+      "worker_id": "Worker-1",
+      "provider_id": "nvidia",
+      "profile_name": "NVIDIA Pool",
+      "model": "meta/llama-3.2-3b-instruct",
+      "use_caveman": true,
+      "use_rtk": true,
+      "status": "success",
+      "approx_tokens": 256,
+      "tokens_saved": 0
+    },
+    {
+      "task_id": 10,
+      "title": "Add GameOptionB navigation button to hub",
+      "worker_id": "Worker-1",
+      "provider_id": "nvidia",
+      "profile_name": "NVIDIA Pool",
+      "model": "nvidia/nemotron-3-nano-30b-a3b",
+      "use_caveman": true,
+      "use_rtk": true,
+      "status": "success",
+      "approx_tokens": 27,
+      "tokens_saved": 0
+    },
+    {
+      "task_id": 13,
+      "title": "Add start buttons for new games in their HTML files",
+      "worker_id": "Worker-1",
+      "provider_id": "nvidia",
+      "profile_name": "NVIDIA Pool",
+      "model": "meta/llama-3.2-3b-instruct",
+      "use_caveman": true,
+      "use_rtk": true,
+      "status": "success",
+      "approx_tokens": 356,
+      "tokens_saved": 0
+    },
+    {
+      "task_id": 9,
+      "title": "Create GameOptionB JavaScript file",
+      "worker_id": "Worker-1",
+      "provider_id": "nvidia",
+      "profile_name": "NVIDIA Pool",
+      "model": "nvidia/nemotron-3-nano-30b-a3b",
+      "use_caveman": true,
+      "use_rtk": true,
+      "status": "success",
+      "approx_tokens": 217,
+      "tokens_saved": 0
+    },
+    {
+      "task_id": 12,
+      "title": "Update navigation logic for new screens",
+      "worker_id": "Worker-1",
+      "provider_id": "nvidia",
+      "profile_name": "NVIDIA Pool",
+      "model": "nvidia/nemotron-3-nano-30b-a3b",
+      "use_caveman": true,
+      "use_rtk": true,
+      "status": "success",
+      "approx_tokens": 133,
+      "tokens_saved": 0
+    },
+    {
+      "task_id": 4,
+      "title": "Create GameOptionA JavaScript file",
+      "worker_id": "Worker-1",
+      "provider_id": "nvidia",
+      "profile_name": "NVIDIA Pool",
+      "model": "nvidia/nemotron-3-nano-30b-a3b",
+      "use_caveman": true,
+      "use_rtk": true,
+      "status": "success",
+      "approx_tokens": 313,
       "tokens_saved": 0
     }
   ],
-  "report_markdown": "Erro na execução do Orquestrador CLI: Error: Individual quota reached. Please upgrade your subscription to increase your limits. Resets in 36m11s.\n"
+  "report_markdown": "# Relatório Final\n## Status: CONCLUÍDO COM SUCESSO\n## Arquivos Alterados\n- D:\\APP\\android\\teste\\games\\optionA\\optionA.html\n- D:\\APP\\android\\teste\\games\\optionA\\styles.css\n- D:\\APP\\android\\teste\\games\\optionA\\script.js\n- D:\\APP\\android\\teste\\games\\optionB\\optionB.html\n- D:\\APP\\android\\teste\\games\\optionB\\optionB.css\n- D:\\APP\\android\\teste\\games\\optionB\\optionB.js\n- D:\\APP\\android\\teste\\games\\app.js\n- D:\\APP\\android\\teste\\games\\game.js\n- D:\\APP\\android\\teste\\games\\navigation.js"
 }
