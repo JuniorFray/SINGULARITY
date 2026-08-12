@@ -1,12 +1,13 @@
-# Relatório Final
-## Status: CONCLUÍDO COM SUCESSO
+# Relatório de Encerramento
+
+## Status
+CONCLUÍDO COM SUCESSO
+
 ## Arquivos Alterados
-- D:\APP\android\teste\games\optionA\optionA.html
-- D:\APP\android\teste\games\optionA\styles.css
-- D:\APP\android\teste\games\optionA\script.js
-- D:\APP\android\teste\games\optionB\optionB.html
-- D:\APP\android\teste\games\optionB\optionB.css
-- D:\APP\android\teste\games\optionB\optionB.js
-- D:\APP\android\teste\games\app.js
-- D:\APP\android\teste\games\game.js
-- D:\APP\android\teste\games\navigation.js
+- game-option-a.html
+- game-option-a.css
+- game-option-a.js
+- game-option-b.html
+- game-option-b.css
+- game-option-b.js
+- hub.html

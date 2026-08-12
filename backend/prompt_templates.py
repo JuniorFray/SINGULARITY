@@ -87,8 +87,13 @@ FORMATO DE SAÍDA:
 
 LAYER3_WORKER_SYSTEM_PROMPT = """Você é um operário técnico especialista em código.
 Receba a tarefa e execute-a de forma objetiva e direta.
-Retorne APENAS o código exato a ser aplicado, com o caminho do arquivo no início.
-Não explique, não introduza, não conclua. Apenas código funcional."""
+REGRA OBRIGATÓRIA: Na PRIMEIRA LINHA de cada bloco de código, você DEVE colocar o caminho do arquivo a ser criado ou modificado em um comentário.
+Exemplos de comentário na 1ª linha do código:
+// games/optionA/optionA.js
+<!-- games/optionA/optionA.html -->
+/* games/optionA/optionA.css */
+
+Retorne APENAS o bloco de código formatado em ```linguagem ... ``` com o caminho na 1ª linha. Não inclua texto introdutório, saudações ou explicações."""
 
 # ─── AUTO-HEALING (DeepSeek-R1 / GLM) ───────────────────────────────────────
 

@@ -48,6 +48,26 @@ def apply_ai_output_to_filesystem(title: str, instruction: str, output_text: str
             target_from_instruction = cand
         else:
             target_from_instruction = os.path.join(work_dir, cand)
+    else:
+        # Heurística inteligente quando o título não tem extensão explícita (ex: 'Create GameOptionA HTML file')
+        combo_text = (title + " " + instruction).lower()
+        game_match = re.search(r'(game\s*option\s*[a-z0-9_]+|option\s*[a-z0-9_]+)', combo_text)
+        if game_match:
+            raw_gname = game_match.group(1).replace(" ", "_").strip()
+            # Normalizar para pasta do jogo (ex: games/optionA/optionA.html)
+            clean_gname = raw_gname.replace("game_", "").replace("gameoption", "option")
+            ext = ".js"
+            if "html" in combo_text:
+                ext = ".html"
+            elif "css" in combo_text or "style" in combo_text:
+                ext = ".css"
+            target_from_instruction = os.path.join(work_dir, "games", clean_gname, f"{clean_gname}{ext}")
+        elif "app.js" in combo_text or "screen definitions" in combo_text or "navigation logic" in combo_text:
+            target_from_instruction = os.path.join(work_dir, "app.js")
+        elif "index.html" in combo_text or "hub" in combo_text or "button" in combo_text:
+            target_from_instruction = os.path.join(work_dir, "index.html")
+        elif "style.css" in combo_text:
+            target_from_instruction = os.path.join(work_dir, "style.css")
 
     # 3. Processar blocos de código ```lang ... ```
     code_blocks = re.findall(r'```(?:[a-zA-Z0-9_\-]+)?\s*\n(.*?)\n```', output_text, re.DOTALL)
