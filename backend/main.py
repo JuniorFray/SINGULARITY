@@ -65,6 +65,12 @@ class SettingsUpdateRequest(BaseModel):
     auto_rotate_quota: Optional[bool] = None
     max_workers: Optional[int] = None
     default_provider: Optional[str] = None
+    # Modelos por camada (dropdowns da aba Provedores, populados pelo catálogo ao vivo)
+    layer1_fallback_model: Optional[str] = None
+    layer2_model: Optional[str] = None
+    layer2_fallback_model: Optional[str] = None
+    layer3_model: Optional[str] = None
+    layer3_fallback_model: Optional[str] = None
 
 class ProfileCreateRequest(BaseModel):
     name: str
@@ -119,6 +125,54 @@ async def remove_nvidia_key(index: int):
     from backend.nvidia_router import nvidia_router
     nvidia_router.update_keys(keys)
     return {"status": "success", "count": len(keys)}
+
+@app.get("/api/nvidia-keys/status")
+async def nvidia_keys_status():
+    """Status individual de cada chave do pool (válida/erro + RPM da janela).
+    Reaproveita GET /v1/models como teste leve — não gasta chat completions."""
+    keys = config_manager.get_nvidia_keys()
+    if not keys:
+        return {"status": "no_keys", "keys": []}
+    from backend.nvidia_router import nvidia_router
+    nvidia_router.update_keys(keys)
+    try:
+        per_key = await nvidia_router.validate_keys()
+        return {"status": "ok", "keys": per_key}
+    except Exception as e:
+        return {"status": "error", "message": str(e), "keys": []}
+
+@app.get("/api/nvidia-catalog/check")
+async def check_nvidia_catalog():
+    """Compara os modelos configurados por camada contra o catálogo NVIDIA VIVO
+    (GET /v1/models). NUNCA troca modelo automaticamente — só reporta 'missing' para
+    a UI mostrar um alerta e o usuário confirmar a mudança manualmente."""
+    keys = config_manager.get_nvidia_keys()
+    if not keys:
+        return {"status": "no_keys", "message": "Nenhuma chave NVIDIA cadastrada."}
+    from backend.nvidia_router import nvidia_router
+    nvidia_router.update_keys(keys)
+    try:
+        catalog = await nvidia_router.list_catalog()
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+    s = config_manager.state.settings
+    configured = {
+        "layer1_fallback_model": s.layer1_fallback_model,
+        "layer2_model": s.layer2_model,
+        "layer2_fallback_model": s.layer2_fallback_model,
+        "layer3_model": s.layer3_model,
+        "layer3_fallback_model": s.layer3_fallback_model,
+    }
+    catalog_set = set(catalog)
+    missing = {k: v for k, v in configured.items() if v not in catalog_set}
+    return {
+        "status": "ok",
+        "count": len(catalog),
+        "catalog": sorted(catalog),
+        "configured": configured,
+        "missing": missing,
+    }
 
 @app.get("/api/profiles")
 def get_profiles():

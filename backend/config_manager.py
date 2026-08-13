@@ -4,7 +4,9 @@ from pathlib import Path
 from pydantic import BaseModel
 from typing import List, Dict, Any
 
-DATA_DIR = Path("D:/Singularity - Sistema Orquestrador IA/data")
+# Raiz do projeto relativa a este arquivo (backend/config_manager.py -> ..).
+# Portátil entre máquinas/SO — não depende mais de caminho absoluto hardcoded.
+DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 CONFIG_FILE = DATA_DIR / "orchestrator_config.json"
 DEFAULT_PROFILES_DIR = Path.home() / ".antigravity_profiles"
 
@@ -22,11 +24,14 @@ class SettingsConfig(BaseModel):
     default_provider: str = "nvidia"
     default_model: str = "meta/llama-3.1-8b-instruct"
     active_work_dir: str = "D:\\APP android teste"
-    # Camada 2: Gerencial (NVIDIA NIM) — contexto longo + raciocínio
-    layer2_model: str = "meta/llama-3.3-70b-instruct"
-    layer2_fallback_model: str = "nvidia/nemotron-3-nano-30b-a3b"
-    # Camada 3: Operacional (NVIDIA NIM) — coding + execução
-    layer3_model: str = "meta/llama-3.1-8b-instruct"
+    # Camada 1: Estratégica (Claude via CLI agy) — fallback NVIDIA dedicado,
+    # desacoplado da Camada 2 (antes reaproveitava layer2_model implicitamente).
+    layer1_fallback_model: str = "z-ai/glm-5.2"
+    # Camada 2: Gerencial (NVIDIA NIM) — contexto longo (1M) + raciocínio/coding SOTA
+    layer2_model: str = "z-ai/glm-5.2"
+    layer2_fallback_model: str = "meta/llama-3.3-70b-instruct"
+    # Camada 3: Operacional (NVIDIA NIM) — modelo dedicado a código (256k ctx)
+    layer3_model: str = "qwen/qwen3-coder-480b-a35b-instruct"
     layer3_fallback_model: str = "nvidia/nemotron-3-nano-30b-a3b"
     # Auto-Healing
     auto_healing_model: str = "nvidia/nemotron-3-nano-30b-a3b"

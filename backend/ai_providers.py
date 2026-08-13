@@ -112,11 +112,12 @@ class ProviderRegistry:
         provider_id: str,
         instruction: str,
         model: Optional[str] = None,
-        skip_permissions: bool = True
+        skip_permissions: bool = True,
+        use_rtk: bool = False
     ) -> str:
         provider = self.get_provider(provider_id) or self.providers["antigravity"]
         selected_model = model or provider.default_model
-        
+
         # Resolver o caminho absoluto do executável para evitar erros no rtk
         binary_path = shutil.which(provider.cli_binary) or provider.cli_binary
         if " " in binary_path:
@@ -131,8 +132,15 @@ class ProviderRegistry:
             model=selected_model,
             flags=flags,
             instruction=instruction
-        )
-        return cmd.strip()
+        ).strip()
+
+        # RTK (Rust Token Killer): proxy que economiza 60-90% de tokens em operações de dev.
+        # Prefixa `rtk ` ao comando final quando o setting use_rtk está ligado.
+        # Antes este setting era decorativo (só aparecia na telemetria) — agora tem efeito real.
+        if use_rtk:
+            cmd = f"rtk {cmd}"
+
+        return cmd
 
     def test_provider(self, provider_id: str) -> Dict[str, Any]:
         """Testa conectividade e saúde de um provedor de IA via CLI ou API HTTP."""
@@ -160,8 +168,9 @@ class ProviderRegistry:
                 test_model = provider.default_model or "nemotron-3-super-120b-a12b"
 
                 async def _ping():
+                    # IDs com prefixo do fabricante (formato exato do catálogo NVIDIA)
                     return await nvidia_router.execute(
-                        model_pipeline=[test_model, "glm-5.2", "llama-3.3-70b-instruct"],
+                        model_pipeline=[test_model, "z-ai/glm-5.2", "meta/llama-3.3-70b-instruct"],
                         messages=[{"role": "user", "content": "Respond 'OK'"}],
                         temperature=0.1,
                         max_tokens=20
@@ -264,31 +273,39 @@ class ProviderRegistry:
             }
 
     def auto_fix(self) -> Dict[str, Any]:
-        """Corrige configurações incorretas, nomes de modelos e rotaciona perfis automaticamente."""
+        """Verifica e REPORTA o estado dos provedores. NÃO sobrescreve a escolha de modelo
+        do usuário nem rotaciona perfis automaticamente (isso é decisão do usuário — ver
+        seção 4 da reestruturação v2). É uma rotina de diagnóstico read-only."""
         from backend.config_manager import config_manager
         fixes = []
-        # Fix 1: Antigravity default model e list
+
+        # Report 1: modelo padrão atual de cada provedor CLI (sem sobrescrever)
         ag = self.providers.get("antigravity")
         if ag:
-            ag.default_model = "Claude Sonnet 4.6 (Thinking)"
-            ag.supported_models = [
-                "Claude Sonnet 4.6 (Thinking)",
-                "Claude Opus 4.6 (Thinking)",
-                "Gemini 3.6 Flash (High)",
-                "Gemini 3.5 Flash (High)",
-                "Gemini 3.1 Pro (High)"
-            ]
-            fixes.append("Atualizada lista e modelo padrão do Antigravity CLI para 'Claude Sonnet 4.6 (Thinking)'")
+            fixes.append(f"Antigravity CLI — modelo padrão configurado: '{ag.default_model}' ({len(ag.supported_models)} modelos).")
 
-        # Fix 2: Rotacionar conta em caso de limite de cota
-        new_prof = config_manager.rotate_profile()
-        fixes.append(f"Rotacionada conta física ativa para: '{new_prof.name}'")
+        # Report 2: perfil ativo atual (sem rotacionar)
+        active = config_manager.get_current_profile()
+        fixes.append(f"Perfil/conta ativa: '{active.name}' (rotação só ocorre em falha real de cota).")
 
-        # Fix 3: Verificação de binários
+        # Report 3: presença dos binários CLI no PATH
         for p_id, p in list(self.providers.items()):
+            if p.cli_binary == "nvidia":
+                continue  # nvidia é API HTTP, não tem binário CLI
             path = shutil.which(p.cli_binary)
             if path:
-                fixes.append(f"Provedor '{p.name}' verificado no PATH: {path}")
+                fixes.append(f"Provedor '{p.name}' encontrado no PATH: {path}")
+            else:
+                fixes.append(f"⚠️ Provedor '{p.name}' — binário '{p.cli_binary}' NÃO encontrado no PATH.")
+
+        # Report 4: modelos por camada configurados (fonte de verdade viva via aba Provedores)
+        s = config_manager.state.settings
+        fixes.append(
+            "Modelos por camada: "
+            f"L1fb={s.layer1_fallback_model}, L2={s.layer2_model}, L2fb={s.layer2_fallback_model}, "
+            f"L3={s.layer3_model}, L3fb={s.layer3_fallback_model}. "
+            "Use '🔄 Verificar catálogo' na aba Provedores para validar contra o catálogo NVIDIA ao vivo."
+        )
 
         return {
             "status": "success",

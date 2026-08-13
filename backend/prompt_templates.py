@@ -66,6 +66,16 @@ REGRAS:
 4. Cada instrução deve citar a pasta de trabalho: `{work_dir}` e o arquivo exato a ser editado.
 5. Retorne APENAS JSON válido sem markdown adicional.
 
+CONTRATO DE ESCRITA (o operário responderá em JSON com operações create/patch):
+6. O operário só recebe a `instruction` desta tarefa — NÃO recebe o snapshot inteiro do projeto.
+   Portanto, se a tarefa EDITA um arquivo que já existe no SNAPSHOT acima, EMBUTA na `instruction`
+   o TRECHO EXATO atual daquele arquivo (copie literalmente do snapshot) que deve ser localizado e
+   alterado, para o operário conseguir gerar um `patch` com `search` casando exatamente 1x.
+7. Para editar arquivo EXISTENTE, a instrução deve pedir explicitamente uma operação de "patch"
+   (não recriar o arquivo). Só use "create" para arquivos que NÃO existem ainda no snapshot.
+8. `allow_overwrite`: mantenha `false` por padrão. Defina `true` APENAS quando o objetivo macro pedir
+   refatoração/substituição total do arquivo (raro). Nunca `true` para uma edição pontual.
+
 FORMATO DE SAÍDA:
 {{
   "project_title": "string",
@@ -74,10 +84,11 @@ FORMATO DE SAÍDA:
     {{
       "id": 1,
       "title": "string incluindo o arquivo exato (ex: Modificar index.html para adicionar card do novo jogo)",
-      "instruction": "string detalhada incluindo o caminho do arquivo dentro de {work_dir} e a modificação exata",
+      "instruction": "string detalhada: caminho do arquivo dentro de {work_dir}, se é create ou patch, e (para patch) o trecho exato atual a ser localizado + a mudança desejada",
       "complexity": "alta|media|baixa",
       "layer": "backend|frontend|infra",
       "provider": "nvidia",
+      "allow_overwrite": false,
       "depends_on": []
     }}
   ]
@@ -85,16 +96,30 @@ FORMATO DE SAÍDA:
 """
 
 # ─── CAMADA 3: Operacional (Qwen Coder / Llama via NVIDIA) ──────────────────
+# Contrato de escrita em disco: o operário NVIDIA (API texto puro) não tem tool use
+# de edição, então é OBRIGADO a responder em JSON estrito. O motor (apply_json_contract)
+# valida create/patch deterministicamente. Isso elimina o parser-por-regex antigo, que
+# adivinhava o arquivo alvo e causava sobrescrita acidental (bug do style.css).
 
 LAYER3_WORKER_SYSTEM_PROMPT = """Você é um operário técnico especialista em código.
-Receba a tarefa e execute-a de forma objetiva e direta.
-REGRA OBRIGATÓRIA: Na PRIMEIRA LINHA de cada bloco de código, você DEVE colocar o caminho do arquivo a ser criado ou modificado em um comentário.
-Exemplos de comentário na 1ª linha do código:
-// games/optionA/optionA.js
-<!-- games/optionA/optionA.html -->
-/* games/optionA/optionA.css */
+Você NÃO tem acesso a terminal nem a ferramentas de edição. Sua ÚNICA forma de alterar o
+projeto é RETORNAR UM OBJETO JSON ESTRITO descrevendo operações de arquivo.
 
-Retorne APENAS o bloco de código formatado em ```linguagem ... ``` com o caminho na 1ª linha. Não inclua texto introdutório, saudações ou explicações."""
+RESPONDA APENAS COM UM JSON VÁLIDO (sem markdown, sem cercas ```), exatamente neste formato:
+{
+  "operations": [
+    { "path": "app.js", "type": "create", "content": "// conteúdo COMPLETO do arquivo novo" },
+    { "path": "style.css", "type": "patch", "search": "trecho EXATO que já existe no arquivo", "replace": "novo trecho que substitui o search" }
+  ]
+}
+
+REGRAS OBRIGATÓRIAS:
+1. "path": caminho RELATIVO à pasta do projeto (ex: "app.js", "games/dodge.js"). Nunca absoluto.
+2. "type": "create" — cria um arquivo NOVO. Use SOMENTE se o arquivo ainda não existir. "content" = arquivo inteiro.
+3. "type": "patch" — edita um arquivo EXISTENTE. "search" deve ser um trecho literal que aparece EXATAMENTE UMA VEZ no arquivo atual (igual a str_replace). "replace" é o novo trecho. Preserve indentação e caracteres exatos.
+4. NUNCA sobrescreva um arquivo existente inteiro com "create". Para editar arquivo existente use SEMPRE "patch".
+5. Não gere comandos de shell (mkdir, ls, cd, rm...). Apenas operações de arquivo dentro do JSON.
+6. Nenhum texto fora do JSON. Nenhuma saudação, explicação ou conclusão."""
 
 # ─── AUTO-HEALING (DeepSeek-R1 / GLM) ───────────────────────────────────────
 

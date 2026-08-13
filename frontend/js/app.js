@@ -140,8 +140,11 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    let currentSettings = {};
+
     function syncSettings(settings) {
         if (!settings) return;
+        currentSettings = settings;
         toggleSkipPerms.checked = settings.skip_permissions;
         toggleRtk.checked = settings.use_rtk;
         toggleCaveman.checked = settings.use_caveman;
@@ -400,7 +403,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     btnManageProviders.addEventListener('click', async () => {
         providersModal.classList.remove('hidden');
+        // Carregar as 3 seções do modal: provedores CLI, pool de chaves NVIDIA e catálogo/modelos por camada.
+        // (fetchNvidiaKeys vivia num bloco morto de #btn-providers que nunca disparava — bug corrigido.)
         fetchProviders();
+        fetchNvidiaKeys();
+        checkNvidiaCatalog();
     });
 
     btnCloseProvidersModal.addEventListener('click', () => providersModal.classList.add('hidden'));
@@ -520,6 +527,7 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     // ─── NVIDIA Keys Management ──────────────────────────────────────────────
+    // Renderização básica (lista mascarada — rápida, local). Enriquecida por status.
     async function fetchNvidiaKeys() {
         try {
             const res = await fetch('/api/nvidia-keys');
@@ -534,7 +542,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const container = document.getElementById('nvidia-keys-list');
         if (!container) return;
         if (!keys || keys.length === 0) {
-            container.innerHTML = '<p style="font-size: 11px; color: var(--text-dim); font-style: italic;">Nenhuma chave cadastrada. Adicione uma chave nvapi-... para ativar a Camada 2 (DeepSeek-R1) e o Auto-Healing.</p>';
+            container.innerHTML = '<p style="font-size: 11px; color: var(--text-dim); font-style: italic;">Nenhuma chave cadastrada. Adicione uma chave nvapi-... para ativar a Camada 2 e o Auto-Healing.</p>';
             return;
         }
         container.innerHTML = keys.map((k, i) => `
@@ -543,6 +551,42 @@ document.addEventListener('DOMContentLoaded', () => {
                 <button onclick="removeNvidiaKey(${i})" style="background: rgba(239,68,68,0.15); border: 1px solid rgba(239,68,68,0.3); color: #f87171; border-radius: 4px; padding: 2px 7px; cursor: pointer; font-size: 10px;">✕</button>
             </div>
         `).join('');
+    }
+
+    // Status individual por chave (válida/erro/RPM) via /api/nvidia-keys/status
+    async function validateNvidiaKeys() {
+        const container = document.getElementById('nvidia-keys-list');
+        try {
+            const res = await fetch('/api/nvidia-keys/status');
+            const data = await res.json();
+            if (data.status === 'ok') {
+                renderNvidiaKeyStatus(data.keys);
+            } else if (data.status === 'no_keys') {
+                renderNvidiaKeys([]);
+            }
+        } catch (e) {
+            console.error('Erro ao validar chaves NVIDIA:', e);
+        }
+    }
+
+    function renderNvidiaKeyStatus(keys) {
+        const container = document.getElementById('nvidia-keys-list');
+        if (!container) return;
+        if (!keys || keys.length === 0) { renderNvidiaKeys([]); return; }
+        container.innerHTML = keys.map(k => {
+            const ok = k.valid;
+            const color = ok ? '#22c55e' : '#ef4444';
+            const status = ok
+                ? `✅ válida · ${k.rpm_used}/${k.rpm_limit} RPM`
+                : `🔴 ${k.error ? k.error.substring(0, 42) : 'erro'}`;
+            const border = ok ? 'rgba(118,185,0,0.25)' : 'rgba(239,68,68,0.4)';
+            return `
+            <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px; background: rgba(118,185,0,0.08); border: 1px solid ${border}; padding: 6px 10px; border-radius: 5px; font-size: 11px; font-family: monospace;">
+                <span style="color: #76b900;">🔑 ${k.masked}</span>
+                <span style="color: ${color}; font-size: 10px; flex: 1; text-align: right;">${status}</span>
+                <button onclick="removeNvidiaKey(${k.index})" style="background: rgba(239,68,68,0.15); border: 1px solid rgba(239,68,68,0.3); color: #f87171; border-radius: 4px; padding: 2px 7px; cursor: pointer; font-size: 10px;">✕</button>
+            </div>`;
+        }).join('');
     }
 
     window.removeNvidiaKey = async (index) => {
@@ -566,13 +610,118 @@ document.addEventListener('DOMContentLoaded', () => {
             });
             keyInput.value = '';
             fetchNvidiaKeys();
+            checkNvidiaCatalog();
         });
     }
 
-    // Carregar chaves ao abrir o modal de providers
-    const btnOpenProviders = document.getElementById('btn-providers');
-    if (btnOpenProviders) {
-        btnOpenProviders.addEventListener('click', fetchNvidiaKeys);
+    const btnValidateKeys = document.getElementById('btn-validate-nvidia-keys');
+    if (btnValidateKeys) {
+        btnValidateKeys.addEventListener('click', validateNvidiaKeys);
+    }
+
+    // ─── Catálogo NVIDIA ao vivo + Modelos por Camada ────────────────────────
+    const LAYER_KEYS = ['layer1_fallback_model', 'layer2_model', 'layer2_fallback_model', 'layer3_model', 'layer3_fallback_model'];
+    let liveCatalog = [];
+
+    // Consulta o catálogo NVIDIA vivo e popula os dropdowns por camada.
+    // NUNCA troca modelo sozinho — só reporta divergência num card de alerta.
+    async function checkNvidiaCatalog() {
+        const countEl = document.getElementById('catalog-count');
+        try {
+            const res = await fetch('/api/nvidia-catalog/check');
+            const data = await res.json();
+            if (data.status === 'no_keys') {
+                if (countEl) countEl.textContent = 'Sem chaves NVIDIA — adicione uma chave para carregar o catálogo.';
+                renderModelDropdowns([], configuredFromSettings(), {});
+                return;
+            }
+            if (data.status === 'error') {
+                if (countEl) countEl.textContent = 'Erro ao consultar catálogo: ' + (data.message || '');
+                renderModelDropdowns([], configuredFromSettings(), {});
+                return;
+            }
+            liveCatalog = data.catalog || [];
+            if (countEl) countEl.textContent = `${data.count} modelos vivos no catálogo NVIDIA.`;
+            renderModelDropdowns(liveCatalog, data.configured || configuredFromSettings(), data.missing || {});
+            renderCatalogAlert(data.missing || {});
+        } catch (e) {
+            console.error('Erro ao verificar catálogo NVIDIA:', e);
+        }
+    }
+
+    function configuredFromSettings() {
+        const c = {};
+        LAYER_KEYS.forEach(k => { c[k] = currentSettings[k] || ''; });
+        return c;
+    }
+
+    function renderModelDropdowns(catalog, configured, missing) {
+        LAYER_KEYS.forEach(key => {
+            const sel = document.getElementById('model-' + key);
+            if (!sel) return;
+            const current = (configured && configured[key]) || sel.value || '';
+            const opts = new Set(catalog);
+            if (current) opts.add(current);
+            sel.innerHTML = '';
+            Array.from(opts).sort().forEach(m => {
+                const o = document.createElement('option');
+                const inCatalog = catalog.includes(m);
+                o.value = m;
+                o.textContent = inCatalog ? m : `${m} (fora do catálogo)`;
+                if (m === current) o.selected = true;
+                sel.appendChild(o);
+            });
+            // Borda vermelha se o modelo configurado sumiu do catálogo vivo
+            sel.style.borderColor = (missing && missing[key]) ? '#ef4444' : '';
+            sel.onchange = () => saveLayerModel(key, sel.value);
+        });
+    }
+
+    function renderCatalogAlert(missing) {
+        const box = document.getElementById('catalog-alert');
+        if (!box) return;
+        const keys = Object.keys(missing || {});
+        if (keys.length === 0) { box.classList.add('hidden'); box.innerHTML = ''; return; }
+        box.classList.remove('hidden');
+        box.innerHTML =
+            '<strong>⚠️ Modelo(s) configurado(s) fora do catálogo NVIDIA atual:</strong>' +
+            '<ul style="margin: 4px 0 0 16px;">' +
+            keys.map(k => `<li>${k}: <code>${missing[k]}</code></li>`).join('') +
+            '</ul>' +
+            '<div style="margin-top: 6px; font-size: 11px;">Selecione um modelo válido no dropdown correspondente para atualizar. Nenhuma troca é feita automaticamente.</div>';
+    }
+
+    // Recalcula o alerta localmente após uma troca manual (sem re-consultar a API).
+    function recomputeCatalogAlert() {
+        const missing = {};
+        LAYER_KEYS.forEach(key => {
+            const sel = document.getElementById('model-' + key);
+            if (sel && sel.value && liveCatalog.length && !liveCatalog.includes(sel.value)) {
+                missing[key] = sel.value;
+            }
+            if (sel) sel.style.borderColor = missing[key] ? '#ef4444' : '';
+        });
+        renderCatalogAlert(missing);
+    }
+
+    async function saveLayerModel(key, value) {
+        try {
+            await fetch('/api/settings', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ [key]: value })
+            });
+            currentSettings[key] = value;
+            appendLog(`[CONFIG] ${key} = ${value}`, 'info');
+            recomputeCatalogAlert();
+        } catch (e) {
+            console.error('Erro ao salvar modelo da camada:', e);
+        }
+    }
+
+    const btnCheckCatalog = document.getElementById('btn-check-catalog');
+    if (btnCheckCatalog) {
+        btnCheckCatalog.addEventListener('click', () => { checkNvidiaCatalog(); validateNvidiaKeys(); });
     }
 
     // Diagnostics Modal Elements

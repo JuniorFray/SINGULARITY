@@ -20,6 +20,7 @@ from backend.ai_providers import provider_registry
 from backend.prompt_templates import ORCHESTRATOR_DECOMPOSE_PROMPT, LAYER1_STRATEGIC_PROMPT, VALIDATION_PROMPT, CAVEMAN_PROMPT
 from backend.worker_pool import WorkerPool
 from backend.manager_layer import ManagerLayer
+from backend.error_detection import is_quota_or_error
 
 PLAN_FILE = DATA_DIR / "current_plan.json"
 CHAT_FILE = DATA_DIR / "chat_history.json"
@@ -103,11 +104,15 @@ class OrchestratorEngine:
             
         clean_prompt = full_prompt.replace("\r\n", " ").replace("\n", " ").replace('"', "'")
             
+        # RTK real na Camada 1 (regra global 1): o comando CLI do orquestrador
+        # também é prefixado com `rtk` quando settings.use_rtk está ligado — antes
+        # esta chamada omitia o parâmetro e a Camada 1 escapava do proxy de tokens.
         comando = provider_registry.build_command(
             provider_id=provider_id,
             instruction=clean_prompt,
             model=model,
-            skip_permissions=settings.skip_permissions
+            skip_permissions=settings.skip_permissions,
+            use_rtk=settings.use_rtk
         )
         
         await self.broadcast({
@@ -133,15 +138,17 @@ class OrchestratorEngine:
 
             returncode, stdout_text, stderr_text = await asyncio.to_thread(run_sync_orchestrator)
             full_out = (stdout_text + "\n" + stderr_text).strip()
-            
-            is_quota = any(kw in full_out.lower() for kw in ["quota", "rate limit", "429", "resource_exhausted", "individual quota reached", "please upgrade"])
+
+            is_quota = is_quota_or_error(full_out)
             if (returncode != 0 or is_quota) and config_manager.get_nvidia_keys():
                 await self.broadcast_chat("orchestrator", "🔄 [Fallback Orquestrador] Cota esgotada no CLI. Alternando para a API NVIDIA NIM...")
                 try:
                     from backend.nvidia_router import nvidia_router
                     nvidia_router.update_keys(config_manager.get_nvidia_keys())
+                    # Camada 1 tem fallback NVIDIA dedicado (layer1_fallback_model),
+                    # desacoplado da Camada 2 — antes reaproveitava layer2_model implicitamente.
                     res = await nvidia_router.execute(
-                        model_pipeline=[settings.layer2_model, settings.layer2_fallback_model, "meta/llama-3.1-8b-instruct"],
+                        model_pipeline=[settings.layer1_fallback_model, settings.layer2_fallback_model, "meta/llama-3.1-8b-instruct"],
                         messages=[
                             {"role": "system", "content": "Você é o Orquestrador Central. Responda com clareza e siga estritamente o formato solicitado."},
                             {"role": "user", "content": full_prompt}
@@ -339,7 +346,9 @@ class OrchestratorEngine:
                             instrucao=task["instruction"],
                             complexity=task.get("complexity", "media"),
                             provider_id=task.get("provider", "antigravity"),
-                            work_dir=self.last_target_dir
+                            work_dir=self.last_target_dir,
+                            # allow_overwrite vem da Camada 2 — só true em refatoração total
+                            allow_overwrite=task.get("allow_overwrite", False)
                         )
                     )
                     running_futures[fut] = task
@@ -401,7 +410,11 @@ class OrchestratorEngine:
 
         report = await self.run_claude_cli(validation_prompt)
 
-        is_error_report = any(kw in report.lower() for kw in ["erro na execução", "quota", "individual quota reached", "exceção ao invocar"])
+        # Detecta se o "relatório" retornado é na verdade uma mensagem de erro/cota
+        # (keywords unificadas) ou um dos marcadores de erro internos do orquestrador.
+        is_error_report = is_quota_or_error(report) or any(
+            m in report.lower() for m in ["erro na execução", "exceção ao invocar"]
+        )
         if is_error_report and config_manager.get_nvidia_keys():
             await self.broadcast_chat("orchestrator", "🔄 [Fallback Validação] Cota esgotada no CLI. Gerando parecer final via NVIDIA NIM API...")
             try:

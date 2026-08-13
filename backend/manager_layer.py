@@ -10,7 +10,7 @@ import json
 from typing import Dict, Any, List, Optional, Callable
 
 from backend.config_manager import config_manager
-from backend.prompt_templates import LAYER2_MANAGER_PROMPT
+from backend.prompt_templates import LAYER2_MANAGER_PROMPT, CAVEMAN_PROMPT
 
 MAX_CONTEXT_CHARS = 400_000  # ~300k tokens de código (metade da janela para segurança)
 
@@ -94,14 +94,19 @@ class ManagerLayer:
             project_context=project_context[:MAX_CONTEXT_CHARS]
         )
 
+        # Caveman aplicado à Camada 2 (antes só era injetado nas Camadas 1 e 3-CLI)
+        system_prompt = (
+            "Você é o Gerente de Projetos Técnico do ecossistema Singularity. "
+            "Você tem acesso a uma janela de contexto massiva com o código atual do projeto. "
+            "Sua função é gerar APENAS um JSON válido com o grafo de tarefas atômicas, "
+            "sem markdown adicional, sem explicações."
+        )
+        if config_manager.state.settings.use_caveman:
+            system_prompt = f"{CAVEMAN_PROMPT}\n\n{system_prompt}"
+
         try:
             raw_response = await nvidia_router.execute_layer2(
-                system_prompt=(
-                    "Você é o Gerente de Projetos Técnico do ecossistema Singularity. "
-                    "Você tem acesso a uma janela de contexto massiva com o código atual do projeto. "
-                    "Sua função é gerar APENAS um JSON válido com o grafo de tarefas atômicas, "
-                    "sem markdown adicional, sem explicações."
-                ),
+                system_prompt=system_prompt,
                 user_content=user_content,
                 broadcaster_fn=self.broadcaster_fn
             )

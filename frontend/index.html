@@ -181,36 +181,70 @@
                 <button class="btn-close" id="btn-close-providers-modal">✕</button>
             </div>
             <div class="modal-body">
-                <p class="help-text">O Singularity suporta múltiplos executáveis de IA CLI simultâneos. Você pode adicionar ou alterar os provedores abaixo:</p>
-                
-                <div class="providers-list" id="providers-list">
-                    <!-- Lista de provedores injetada via JS -->
-                </div>
+                <!-- SEÇÃO 1: PROVEDORES CLI ─────────────────────────────────── -->
+                <details class="prov-section" open>
+                    <summary>🖥️ Provedores CLI</summary>
+                    <p class="help-text">Executáveis de IA CLI com tool use real. <strong>Antigravity</strong> roda em paralelo livre; <strong>Claude Code</strong> é limitado a 1 execução simultânea.</p>
+                    <div class="providers-list" id="providers-list">
+                        <!-- Lista de provedores injetada via JS -->
+                    </div>
 
-                <hr style="border: 0; border-top: 1px solid var(--border-color); margin: 10px 0;">
-                
-                <h4 style="font-size: 13px; color: #76b900;">🔑 Chaves NVIDIA AI (Pool de Rotação Automática)</h4>
-                <p style="font-size: 11px; color: var(--text-muted); margin-bottom: 6px;">Adicione suas chaves <code>nvapi-...</code>. O sistema rotaciona automaticamente ao atingir o limite de 40 RPM.</p>
-                <div id="nvidia-keys-list" style="display: flex; flex-direction: column; gap: 4px; max-height: 120px; overflow-y: auto; margin-bottom: 8px;"></div>
-                <div style="display: flex; gap: 8px;">
-                    <input type="password" id="new-nvidia-key" placeholder="nvapi-..." style="flex: 1; background: var(--card-bg); border: 1px solid #76b90055; border-radius: 6px; padding: 7px 10px; color: white; font-size: 12px; font-family: monospace;">
-                    <button class="btn btn-primary btn-sm" id="btn-add-nvidia-key" style="background: #76b900; border-color: #76b900; white-space: nowrap;">+ Adicionar</button>
-                </div>
-                
-                <h4 style="font-size: 13px; margin-top: 15px;">➕ Adicionar Provedor Customizado</h4>
-                <div class="add-provider-form" style="display: flex; flex-direction: column; gap: 8px; margin-top: 8px;">
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
-                        <input type="text" id="new-provider-id" placeholder="ID (ex: nvidia)">
-                        <input type="text" id="new-provider-name" placeholder="Nome Exibição (ex: NVIDIA NIM)">
+                    <h4 style="font-size: 13px; margin-top: 12px;">➕ Adicionar Provedor Customizado</h4>
+                    <div class="add-provider-form" style="display: flex; flex-direction: column; gap: 8px; margin-top: 8px;">
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                            <input type="text" id="new-provider-id" placeholder="ID (ex: nvidia)">
+                            <input type="text" id="new-provider-name" placeholder="Nome Exibição (ex: NVIDIA NIM)">
+                        </div>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                            <input type="text" id="new-provider-binary" placeholder="Executável CLI (ex: nvidia)">
+                            <input type="text" id="new-provider-default-model" placeholder="Model Padrão (ex: nvidia/llama-3.1-nemotron-70b-instruct)">
+                        </div>
+                        <input type="text" id="new-provider-supported-models" placeholder="Modelos Suportados separados por vírgula (ex: modelo1, modelo2)">
+                        <input type="text" id="new-provider-template" placeholder="Template de comando (ex: {binary} --model &quot;{model}&quot; {flags} -p &quot;{instruction}&quot;)">
+                        <button class="btn btn-primary btn-block" id="btn-add-provider" style="margin-top: 5px;">Cadastrar Provedor</button>
                     </div>
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
-                        <input type="text" id="new-provider-binary" placeholder="Executável CLI (ex: nvidia)">
-                        <input type="text" id="new-provider-default-model" placeholder="Model Padrão (ex: nvidia/llama-3.1-nemotron-70b-instruct)">
+                </details>
+
+                <!-- SEÇÃO 2: POOL DE CHAVES NVIDIA ───────────────────────────── -->
+                <details class="prov-section" open>
+                    <summary>🔑 Pool de Chaves NVIDIA</summary>
+                    <p style="font-size: 11px; color: var(--text-muted); margin-bottom: 6px;">Adicione suas chaves <code>nvapi-...</code>. O sistema rotaciona automaticamente ao atingir o limite de RPM. Cada chave mostra status individual (válida / erro / RPM).</p>
+                    <div style="display: flex; gap: 8px; margin-bottom: 8px;">
+                        <button class="btn btn-sm btn-outline" id="btn-validate-nvidia-keys">🔍 Testar chaves</button>
                     </div>
-                    <input type="text" id="new-provider-supported-models" placeholder="Modelos Suportados separados por vírgula (ex: modelo1, modelo2)">
-                    <input type="text" id="new-provider-template" placeholder="Template de comando (ex: {binary} --model &quot;{model}&quot; {flags} -p &quot;{instruction}&quot;)">
-                    <button class="btn btn-primary btn-block" id="btn-add-provider" style="margin-top: 5px;">Cadastrar Provedor</button>
-                </div>
+                    <div id="nvidia-keys-list" style="display: flex; flex-direction: column; gap: 4px; max-height: 140px; overflow-y: auto; margin-bottom: 8px;"></div>
+                    <div style="display: flex; gap: 8px;">
+                        <input type="password" id="new-nvidia-key" placeholder="nvapi-..." style="flex: 1; background: var(--card-bg); border: 1px solid #76b90055; border-radius: 6px; padding: 7px 10px; color: white; font-size: 12px; font-family: monospace;">
+                        <button class="btn btn-primary btn-sm" id="btn-add-nvidia-key" style="background: #76b900; border-color: #76b900; white-space: nowrap;">+ Adicionar</button>
+                    </div>
+                </details>
+
+                <!-- SEÇÃO 3: MODELOS POR CAMADA ──────────────────────────────── -->
+                <details class="prov-section" open>
+                    <summary>🧠 Modelos por Camada</summary>
+                    <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 8px;">
+                        <button class="btn btn-sm btn-outline" id="btn-check-catalog">🔄 Verificar catálogo</button>
+                        <span id="catalog-count" style="font-size: 11px; color: var(--text-muted);"></span>
+                    </div>
+                    <div id="catalog-alert" class="catalog-alert hidden"></div>
+                    <div class="layer-models-grid">
+                        <label>Camada 1 — Fallback (Estratégica)
+                            <select id="model-layer1_fallback_model" data-layer="layer1_fallback_model"></select>
+                        </label>
+                        <label>Camada 2 — Gerencial
+                            <select id="model-layer2_model" data-layer="layer2_model"></select>
+                        </label>
+                        <label>Camada 2 — Fallback
+                            <select id="model-layer2_fallback_model" data-layer="layer2_fallback_model"></select>
+                        </label>
+                        <label>Camada 3 — Operacional (código)
+                            <select id="model-layer3_model" data-layer="layer3_model"></select>
+                        </label>
+                        <label>Camada 3 — Fallback
+                            <select id="model-layer3_fallback_model" data-layer="layer3_fallback_model"></select>
+                        </label>
+                    </div>
+                </details>
             </div>
         </div>
     </div>

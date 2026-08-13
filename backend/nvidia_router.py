@@ -8,6 +8,8 @@ import asyncio
 import time
 from typing import List, Dict, Any, Optional
 
+from backend.error_detection import is_rate_limited
+
 try:
     from openai import AsyncOpenAI, RateLimitError, APIError
     OPENAI_AVAILABLE = True
@@ -134,6 +136,61 @@ class NvidiaRouter:
                         continue
 
         raise RuntimeError(f"[NVIDIA Router] Todos os modelos e chaves falharam: {model_pipeline}")
+
+    async def list_catalog(self) -> List[str]:
+        """Lista os IDs de modelos VIVOS do catálogo NVIDIA (endpoint OpenAI-compatible
+        GET /v1/models). Fonte de verdade viva para a aba Provedores. Rotaciona a chave
+        em caso de 429."""
+        if not OPENAI_AVAILABLE:
+            raise RuntimeError("openai não instalado. Execute: pip install openai>=1.35.0")
+        if not self.api_keys:
+            raise RuntimeError("Nenhuma chave NVIDIA configurada.")
+
+        last_err: Optional[Exception] = None
+        for _ in range(max(1, len(self.api_keys))):
+            try:
+                client = self._get_client()
+                resp = await client.models.list()
+                ids = [getattr(m, "id", None) for m in resp.data]
+                return [m for m in ids if m]
+            except Exception as e:
+                last_err = e
+                # 429 → tenta a próxima chave; outro erro → aborta
+                if is_rate_limited(str(e)):
+                    self._rotate_key()
+                    continue
+                raise
+        raise RuntimeError(f"Falha ao listar catálogo NVIDIA: {last_err}")
+
+    async def validate_keys(self) -> List[Dict[str, Any]]:
+        """Testa cada chave do pool individualmente via GET /v1/models (chamada leve —
+        não gasta uma chamada de chat completions só para validar). Retorna status por
+        chave (válida/erro) + uso atual da janela deslizante de RPM."""
+        results: List[Dict[str, Any]] = []
+        now = time.time()
+        rpm_used = len([t for t in self.request_timestamps if now - t < 60])
+        for i, key in enumerate(self.api_keys):
+            masked = f"nvapi-...{key[-6:]}" if len(key) > 10 else "***"
+            entry: Dict[str, Any] = {
+                "index": i,
+                "masked": masked,
+                "valid": False,
+                "error": None,
+                "rpm_used": rpm_used,
+                "rpm_limit": self.safe_rpm_limit,
+            }
+            if not OPENAI_AVAILABLE:
+                entry["error"] = "openai não instalado"
+                results.append(entry)
+                continue
+            try:
+                client = AsyncOpenAI(base_url=NVIDIA_BASE_URL, api_key=key, timeout=20.0)
+                await client.models.list()
+                entry["valid"] = True
+            except Exception as e:
+                entry["error"] = str(e)[:160]
+            results.append(entry)
+        return results
 
     async def execute_layer2(self, system_prompt: str, user_content: str, broadcaster_fn=None) -> str:
         """Atalho para Camada 2 (Gerencial — DeepSeek-R1 com fallback Llama)."""

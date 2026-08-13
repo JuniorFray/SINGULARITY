@@ -1,6 +1,8 @@
-# Singularity — Sistema Orquestrador IA Multiagente
+# Singularity — Sistema Orquestrador IA Multiagente (v2)
 
-Sistema Orquestrador IA de alta capacidade com arquitetura em 3 camadas, auto-healing de código, roteamento resiliente com pool de chaves NVIDIA e execução paralela de operários.
+Sistema Orquestrador IA de alta capacidade com arquitetura em 3 camadas, **contrato JSON determinístico de escrita em disco**, Auto-Healing estrutural, roteamento resiliente com pool de chaves NVIDIA e execução paralela de operários.
+
+> **v2** substituiu o antigo parser-por-regex (que adivinhava o arquivo-alvo a partir de texto livre) por um **contrato JSON estrito de operações `create`/`patch`**. Isso elimina a causa-raiz dos bugs de sobrescrita (ex: `style.css` trocado por snippet). Todos os modelos por camada foram validados ao vivo contra o catálogo NVIDIA NIM.
 
 ---
 
@@ -8,92 +10,142 @@ Sistema Orquestrador IA de alta capacidade com arquitetura em 3 camadas, auto-he
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│         CAMADA 1: ESTRATÉGICA (Claude Sonnet / agy)     │ -> Arquiteta o escopo macro
-└────────────────────────────┬────────────────────────────┘    e gera o contrato JSON global.
+│   CAMADA 1: ESTRATÉGICA (Claude Sonnet via agy CLI)     │ -> Arquiteta o escopo macro
+└────────────────────────────┬────────────────────────────┘    e gera o contrato de arquitetura.
                              │
                              ▼
 ┌─────────────────────────────────────────────────────────┐
-│     CAMADA 2: GERENCIAL (DeepSeek-R1 / NVIDIA NIM)      │ -> Lê contexto massivo do projeto
+│      CAMADA 2: GERENCIAL (z-ai/glm-5.2 / NVIDIA)        │ -> Lê contexto massivo do projeto
 └────────────────────────────┬────────────────────────────┘    e gera o grafo de tarefas atômicas.
                              │
                              ▼
 ┌─────────────────────────────────────────────────────────┐
-│     CAMADA 3: OPERACIONAL (Llama / Nemotron / agy)      │ -> Execução de código em paralelo
-└─────────────────────────────────────────────────────────┘    com Auto-Healing (3 tentativas).
+│  CAMADA 3: OPERACIONAL (qwen3-coder-480b / agy CLI)     │ -> Execução paralela com contrato
+└─────────────────────────────────────────────────────────┘    JSON de escrita + Auto-Healing.
 ```
 
 ### 1. Camada 1: Estratégica (Diretor de Arquitetura)
-* **Provedor:** `antigravity` (Antigravity CLI `agy`)
-* **Modelo:** `Claude Sonnet 4.6 (Thinking)`
-* **Função:** Recebe o objetivo macro do usuário e gera o contrato de arquitetura em JSON com os módulos e dependências principais.
+* **Provedor:** `antigravity` (Antigravity CLI `agy`) — tool use real.
+* **Modelo:** `Claude Sonnet 4.6 (Thinking)` via CLI.
+* **Fallback NVIDIA dedicado:** `layer1_fallback_model = z-ai/glm-5.2` — **desacoplado** da Camada 2 (antes reaproveitava `layer2_model` implicitamente; corrigido em `orchestrator.py::run_claude_cli`).
+* **Função:** Recebe o objetivo macro do usuário e gera o contrato de arquitetura com módulos e dependências.
 
 ### 2. Camada 2: Gerencial (Gerente Técnico)
-* **Provedor:** `nvidia` (NVIDIA NIM API HTTP)
-* **Modelos:** `meta/llama-3.3-70b-instruct` | Fallback: `nvidia/nemotron-3-nano-30b-a3b`
-* **Função:** Lê o snapshot dos arquivos de código do projeto (até 500k tokens) e decompõe a arquitetura da Camada 1 em tarefas atômicas prontas para os operários.
-* **Regra CWD (atualização):** Trata o Diretório Alvo como o diretório de trabalho corrente (estilo PowerShell `cd`). Lê os arquivos existentes do projeto (index.html, app.js, style.css etc.) e gera tarefas que modificam esses arquivos diretamente, nunca cria arquivos soltos/genéricos sem ligação com o projeto.
+* **Provedor:** `nvidia` (NVIDIA NIM API HTTP).
+* **Modelos:** `layer2_model = z-ai/glm-5.2` (1M de contexto, SOTA coding/agentic) | Fallback: `meta/llama-3.3-70b-instruct`.
+* **Função:** Lê o snapshot dos arquivos reais do projeto (`_read_project_files`) e decompõe a arquitetura em tarefas atômicas.
+* **Regra de contrato:** cada `instruction` gerada já embute o trecho exato do arquivo a alterar quando a tarefa é `patch` — o operário recebe só a tarefa, não o snapshot inteiro. Isso permite que o operário produza um `search` que case exatamente 1x.
+* **Regra CWD:** trata o Diretório Alvo como diretório corrente (estilo PowerShell `cd`). Gera tarefas que modificam os arquivos existentes diretamente, nunca cria arquivos soltos sem ligação com o projeto.
 
 ### 3. Camada 3: Operacional (Workers de Execução)
-* **Provedores:** `nvidia` (API) & `antigravity` (CLI)
-* **Modelos:** `meta/llama-3.1-8b-instruct` | `nvidia/nemotron-3-nano-30b-a3b`
-* **Função:** Executa alterações de código e comandos de terminal em paralelo.
-* **Regra (atualização):** Na PRIMEIRA LINHA de cada bloco de código gerado, o modelo é instruído a colocar o caminho relativo do arquivo em comentário (ex: `// app.js`, `<!-- index.html -->`).
+* **Provedores:** `nvidia` (API, contrato JSON) & `antigravity`/`claude_code` (CLI, tool use real).
+* **Modelos:** `layer3_model = qwen/qwen3-coder-480b-a35b-instruct` (256k ctx, dedicado a código) | Fallback: `nvidia/nemotron-3-nano-30b-a3b`.
+* **Função:** Executa alterações de código em paralelo.
+* **Dois caminhos de escrita distintos:**
+  * **CLI (`agy`, `claude`):** já editam arquivos via tool use — o motor só captura/reporta o que a CLI fez. **Não** passam por `apply_json_contract`.
+  * **API `nvidia` (texto puro):** **obrigada** a responder em JSON estrito de operações (ver abaixo). Nunca texto livre.
+
+---
+
+## 📝 Contrato de Escrita em Disco (`worker_pool.py::apply_json_contract`)
+
+O operário NVIDIA responde **apenas** com JSON estrito (`LAYER3_WORKER_SYSTEM_PROMPT`):
+
+```json
+{
+  "operations": [
+    { "path": "app.js", "type": "create", "content": "// conteúdo COMPLETO do arquivo novo" },
+    { "path": "style.css", "type": "patch", "search": "trecho EXATO existente", "replace": "novo trecho" }
+  ]
+}
+```
+
+**Regras de validação (determinísticas, sem heurística de adivinhação):**
+* `type: "create"` — permitido **apenas** se o arquivo não existir, **ou** se a tarefa trouxer `allow_overwrite: true` (refatoração total pedida pela Camada 2). Caso contrário é rejeitado e força `patch`.
+* `type: "patch"` — `search` deve casar **exatamente 1 vez** no arquivo (mesmo princípio do `str_replace`). 0 ou 2+ ocorrências → falha explícita sem gravar nada, com erro estruturado (arquivo, trecho procurado) alimentando o Auto-Healing.
+* JSON malformado → falha explícita, mesma rota de Auto-Healing.
+* **Backup `.bak`** automático antes de qualquer `patch`/`create` sobre arquivo existente.
+* Blocos de shell (`mkdir`, `ls`, `cd`, `rm`...) são proibidos dentro do contrato.
 
 ---
 
 ## 🔧 Recursos & Mecanismos Avançados
 
-### Auto-Healing de Código (3 Tentativas sem Custo)
-* Intercepta erros no `stdout`/`stderr` do terminal (`SyntaxError`, `AssertionError`, etc.).
-* O script envia o erro + código problemático para a Camada Gerencial via NVIDIA NIM.
-* O modelo reescreve o prompt com instruções corretivas diretas.
-* O operário tenta a correção por até 3 ciclos antes de escalar.
+### Auto-Healing Determinístico (redesenhado, teto de 3 tentativas)
+> Removida a antiga varredura de palavras-chave (`error:`, `exception`, `traceback`) no stdout de execuções bem-sucedidas — causava falso positivo sempre que o código legítimo continha um `try/except`.
+
+* **Gatilhos estruturais (não por palavra-chave):**
+  1. JSON de operação malformado.
+  2. `search` de `patch` que não casa exatamente 1x.
+  3. **Checagem de sintaxe pós-escrita** (`worker_pool.py::_syntax_check`): `python -m py_compile` para `.py`, `node --check` para `.js`, `json.loads()` para `.json`. Erro real → aciona com a mensagem exata do compilador.
+* O erro **estruturado exato** vai para o prompt de correção (não mais um trecho arbitrário de stdout).
+* `healing_attempts` é **variável local** de `_run_nvidia_worker` — corrige o vazamento de estado do antigo `self._healing_attempts` (contador reaproveitado entre tarefas).
+* Teto configurável: `auto_healing_max_attempts = 3`.
 
 ### Roteador Resiliente NVIDIA NIM (`backend/nvidia_router.py`)
-* **Pool de Chaves:** Armazena múltiplas chaves `nvapi-...` em `data/nvidia_keys.json`.
-* **Vazão Controlada:** Semáforo assíncrono com janela deslizante de 60s ajustado para 35 RPM por chave (evita erros `429`).
-* **Rotação Automática:** Em caso de `429`, rotaciona instantaneamente para a próxima chave do pool.
+* **Pool de Chaves:** múltiplas `nvapi-...` em `data/nvidia_keys.json`.
+* **Vazão Controlada:** semáforo assíncrono, janela deslizante de 60s, `nvidia_safe_rpm = 35` por chave (evita `429`).
+* **Rotação Automática:** em `429`, rotaciona para a próxima chave do pool.
+* **`list_catalog()`** e **`validate_keys()`** reaproveitam `GET /v1/models` como teste leve (não gastam chat completions).
 
-### Inferência Inteligente de Caminhos de Arquivo (`backend/worker_pool.py`)
-* Se a IA omitir o comentário de caminho na primeira linha, o motor analisa o título e instrução da tarefa e usa heurística para inferir o arquivo-alvo (ex: título contendo `index.html` e `hub` → grava em `index.html`).
-* **Proteção de Integridade:** Recusa sobrescrever arquivos com mais de `200 bytes` por snippets menores que `50 bytes`.
-* **Backup Automático `.bak`:** Antes de modificar qualquer arquivo, cria cópia de segurança (`arquivo.ext.bak`).
-* **Filtro Anti-Corrupção:** Ignora blocos de código identificados como terminal/bash (`ls`, `dir`, `cd`, etc.) para evitar sobrescrita acidental de código JavaScript/HTML.
+### Catálogo NVIDIA ao Vivo (fonte de verdade única)
+* Endpoint `GET /api/nvidia-catalog/check`: consulta `GET https://integrate.api.nvidia.com/v1/models` e compara contra os modelos configurados por camada.
+* Modelo configurado que sumiu do catálogo → `missing`, exibido como **card de alerta** na UI.
+* **Nunca troca modelo automaticamente** — o usuário confirma via dropdown. `auto_fix()` só verifica/reporta, jamais sobrescreve a escolha do usuário.
 
-### Gestão de Provedores Persistente (`data/providers.json`)
-* Provedor Ollama totalmente removido.
-* Provedor `nvidia` integrado nativamente com modelos testados e ativos (`meta/llama-3.1-8b-instruct`, `nvidia/nemotron-3-nano-30b-a3b`, `meta/llama-3.3-70b-instruct`, `meta/llama-3.2-11b-vision-instruct`).
-* Modais de interface permitem adicionar novos provedores e gerenciar o pool de chaves NVIDIA em tempo real.
+### RTK — Rust Token Killer (regra global 1)
+* `settings.use_rtk` agora tem **efeito real**: `ai_providers.py::build_command` prefixa `rtk ` ao comando CLI final quando ligado.
+* Aplicado em **todas** as chamadas CLI: Camada 1 (`orchestrator.py`), Camada 3 (`worker_pool.py`) e teste de provedor. A checagem de sintaxe (`node --check`/`py_compile`) fica fora do escopo (não é provider CLI).
 
-### Validação Anti-Alucinação (`backend/prompt_templates.py` — `VALIDATION_PROMPT`)
-* O Parecer Final é instruído a basear-se **apenas** nos relatórios reais de execução.
-* Proibido mencionar ou inventar arquivos que não existam no projeto (como `AndroidManifest.xml`).
+### Caveman Mode em Todas as Camadas (regra global 2)
+* `CAVEMAN_PROMPT` injetado quando `settings.use_caveman`: Camada 1 (`orchestrator.py`), Camada 2 (`manager_layer.py`), Camada 3 via API e via CLI (`worker_pool.py`) e Auto-Healing.
+
+### Detecção Unificada de Erro/Cota (`backend/error_detection.py`)
+* `is_quota_or_error()` e `is_rate_limited()` — lista única de keywords centralizada, reusada por `orchestrator.py`, `worker_pool.py` e `manager_layer.py` (antes duplicada com variações).
+
+### Claude Code CLI reativado (concorrência limitada)
+* Provider `claude_code` permanece `is_active=True`.
+* `WorkerPool` mantém `asyncio.Semaphore(1)` **dedicado** a `provider == "claude_code"` — 1 execução simultânea (1 sessão OAuth, sem rotação de perfil). `antigravity` e `nvidia` seguem paralelos no pool geral.
+
+### Validação Anti-Alucinação (`prompt_templates.py::VALIDATION_PROMPT`)
+* O Parecer Final baseia-se **apenas** nos relatórios reais de execução — proibido inventar arquivos inexistentes.
 
 ---
 
-## ⚠️ Bugs Conhecidos & Problemas em Análise
+## 🎨 UI — Aba Provedores (redesenhada, 3 seções)
 
-> Estes problemas foram identificados em testes reais e ainda precisam de solução estrutural no motor de orquestração:
+Modal `#providers-modal` dividido em `<details>`:
+1. **Provedores CLI** — Antigravity / Claude Code, badge "Nativo".
+2. **Pool de Chaves NVIDIA** — status individual por chave (✅ válida · `12/35 RPM` / 🔴 erro) via `/api/nvidia-keys/status`.
+3. **Modelos por Camada** — dropdowns populados do catálogo ao vivo + botão "🔄 Verificar catálogo" + card de alerta de desatualização.
 
-1. **Workaround do `style.css`:** O orquestrador substituiu o CSS original do projeto alvo por um snippet de 5 linhas. Os arquivos CSS do projeto alvo devem ser tratados como **somente-leitura para operações de append**, nunca substituição total, a menos que o objetivo macro explicitamente peça refatoração visual completa.
+> **Bug corrigido:** `fetchNvidiaKeys()` vivia num bloco morto de `#btn-providers` (ID inexistente no HTML) e nunca disparava. Movido para o listener de `#btn-manage-providers`.
 
-2. **Escopo CWD ainda imperfeito:** Em algumas execuções, o caminho `D:\APP android teste` (com espaço) foi truncado para `D:\APP` por regex. Corrigido em `orchestrator.py` mas requer testes adicionais com múltiplos espaços.
+---
 
-3. **Coexistência de operações estruturais e de detalhe:** O orquestrador ainda mistura tarefas de "criação de arquivo" e "edição pontual de trecho de código" sem distinção clara. Tarefas de edição pontual precisam de um mecanismo de PATCH (inserção de bloco específico), não sobrescrita total.
+## ✅ Bugs Corrigidos na v2
+
+1. **`style.css` sobrescrito** — resolvido pelo contrato JSON: `create` proibido em arquivo existente sem `allow_overwrite`; edições exigem `patch` com `search` exato.
+2. **Auto-Healing por falso positivo** — removida a varredura de keywords em stdout de sucesso; gatilhos agora são estruturais.
+3. **Vazamento de estado do healing** — `healing_attempts` virou variável local.
+4. **Chaves NVIDIA invisíveis na UI** — listener corrigido.
+5. **`DATA_DIR` hardcoded** — agora `Path(__file__).resolve().parent.parent / "data"` (portátil entre máquinas/SO).
+6. **Fallback da Camada 1** — usa `layer1_fallback_model` explícito, não mais `layer2_model` implícito.
 
 ---
 
 ## 📁 Estrutura de Arquivos Principais
 
-* **`run.py`**: Ponto de entrada da aplicação FastAPI.
-* **`backend/orchestrator.py`**: Orquestrador central de 2 fases (Camada 1 + Camada 2). Inclui parser de caminho CWD corrigido para Windows com espaços.
-* **`backend/manager_layer.py`**: Camada Gerencial que analisa o código do projeto via DeepSeek/Llama.
-* **`backend/worker_pool.py`**: Workers paralelos da Camada 3 com Auto-Healing, proteção de integridade e backup automático.
-* **`backend/nvidia_router.py`**: Roteador assíncrono com controle de vazão RPM e rotação de chaves.
-* **`backend/ai_providers.py`**: Registry de provedores e testes de diagnóstico HTTP/CLI.
-* **`backend/config_manager.py`**: Gerenciador de configurações, perfis Google e chaves NVIDIA.
-* **`backend/prompt_templates.py`**: Prompts especializados para cada camada do sistema (Camadas 1, 2, 3, Auto-Healing e Validação).
-* **`frontend/`**: Interface web responsiva em glassmorphism (HTML/CSS/JS).
+* **`run.py`**: Ponto de entrada FastAPI.
+* **`backend/orchestrator.py`**: Orquestrador de 2 fases (Camada 1 + Camada 2). Parser CWD para Windows com espaços; RTK/Caveman na Camada 1.
+* **`backend/manager_layer.py`**: Camada Gerencial — analisa o código real do projeto e decompõe em tarefas.
+* **`backend/worker_pool.py`**: Workers da Camada 3 — `apply_json_contract`, `_syntax_check`, Auto-Healing determinístico, semáforo `claude_code`, backup `.bak`.
+* **`backend/nvidia_router.py`**: Roteador assíncrono — RPM, rotação de chaves, `list_catalog`, `validate_keys`.
+* **`backend/ai_providers.py`**: Registry de provedores, `build_command` (RTK), diagnóstico HTTP/CLI.
+* **`backend/config_manager.py`**: Configurações (`SettingsConfig`), perfis, chaves NVIDIA, `DATA_DIR` portátil.
+* **`backend/error_detection.py`**: Detecção unificada de erro/cota.
+* **`backend/prompt_templates.py`**: Prompts das camadas 1–3, contrato de escrita, Auto-Healing, Validação.
+* **`frontend/`**: Interface web glassmorphism (HTML/CSS/JS) — modal de provedores em 3 seções.
 
 ---
 
