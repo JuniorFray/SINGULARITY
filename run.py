@@ -5,8 +5,17 @@ import webbrowser
 import time
 import asyncio
 
-if sys.platform == "win32":
-    asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+# Forçar stdout/stderr em UTF-8 para evitar erros de emoji no terminal Windows (cp1252)
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
+if sys.platform == "win32" and sys.version_info < (3, 16):
+    try:
+        asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+    except Exception:
+        pass
 
 def check_dependencies():
     print("📦 Verificando dependências do Singularity Orquestrador...")
