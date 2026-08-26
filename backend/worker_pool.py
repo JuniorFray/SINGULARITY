@@ -295,6 +295,10 @@ def apply_json_contract(output_text: str, work_dir: str, allow_overwrite: bool =
             if content is None:
                 result["errors"].append(f"{rel_path}: operação 'create' sem 'content'.")
                 continue
+            # Normalização de escapes literais excessivos (ex: \\n em JSON mal decodificado pelo LLM)
+            if isinstance(content, str) and "\\n" in content and "\n" not in content:
+                content = content.replace("\\r\\n", "\n").replace("\\n", "\n").replace("\\t", "\t").replace('\\"', '"')
+
             # create só é permitido para arquivo inexistente — salvo refatoração total (allow_overwrite)
             if already and not allow_overwrite:
                 result["errors"].append(

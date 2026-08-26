@@ -36,11 +36,12 @@ class OrchestratorEngine:
         self.current_plan: Dict[str, Any] = self.load_plan()
         self.chat_history: List[Dict[str, Any]] = self.load_chat_history()
         self.execution_results: List[Dict[str, Any]] = []
-        # Modelos usados por camada NÃO-operária (Camada 1 e 2 + validação). A telemetria
-        # antiga só creditava os operários (Camada 3); glm-5.2 ficava invisível.
-        self.pipeline_models: List[Dict[str, str]] = []  # [{"layer": ..., "model": ...}]
-        # Histórico do chat conversacional (Q&A grátis) em formato role/content para o LLM.
-        self.qa_history: List[Dict[str, str]] = []
+        self.pipeline_models: List[Dict[str, str]] = []
+        # Reconstruir memória conversacional ativa persistente a partir do histórico
+        self.qa_history: List[Dict[str, str]] = [
+            {"role": "user" if m.get("sender") == "user" else "assistant", "content": m.get("text", "")}
+            for m in self.chat_history if m.get("text") and not m.get("text", "").startswith("🚀")
+        ]
         self.last_target_dir: str = "D:\\APP android teste"
 
     def _record_model(self, layer: str, model: str):
