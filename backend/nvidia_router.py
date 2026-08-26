@@ -48,7 +48,11 @@ class NvidiaRouter:
         if not self.api_keys:
             raise RuntimeError("Nenhuma chave NVIDIA cadastrada. Adicione uma chave 'nvapi-...' nas configurações.")
         key = self.api_keys[self.key_index % len(self.api_keys)]
-        return AsyncOpenAI(base_url=NVIDIA_BASE_URL, api_key=key, timeout=45.0)
+        # timeout 240s + streaming: modelos reasoning (ex: z-ai/glm-5.2) têm cold-start
+        # de ~65s ATÉ O PRIMEIRO TOKEN. Em modo não-streaming a chamada inteira estourava
+        # o timeout e a camada caía no fallback fraco. max_retries=0 evita o SDK repetir a
+        # chamada 3x internamente (era o que inflava o tempo de falha para 500s+).
+        return AsyncOpenAI(base_url=NVIDIA_BASE_URL, api_key=key, timeout=240.0, max_retries=0)
 
     async def _throttle_if_needed(self):
         """Janela deslizante de 60s — pausa inteligente antes de atingir o limite."""
@@ -108,24 +112,64 @@ class NvidiaRouter:
                             "log_type": "info"
                         })
 
-                    response = await client.chat.completions.create(
+                    # STREAMING: consome token a token. Isso mantém a conexão viva durante
+                    # o cold-start (glm-5.2 leva ~65s até o 1º token) e permite retorno mesmo
+                    # em respostas longas de modelos reasoning. Acumula e devolve o texto completo.
+                    stream = await client.chat.completions.create(
                         model=model,
                         messages=messages,
                         temperature=temperature,
-                        max_tokens=max_tokens
+                        max_tokens=max_tokens,
+                        stream=True
                     )
-                    return response.choices[0].message.content or ""
+                    parts: List[str] = []
+                    first_token_seen = False
+                    async for chunk in stream:
+                        if not chunk.choices:
+                            continue
+                        delta = chunk.choices[0].delta.content
+                        if delta:
+                            if not first_token_seen and broadcaster_fn:
+                                first_token_seen = True
+                                await broadcaster_fn({
+                                    "type": "terminal_log",
+                                    "worker_id": "nvidia_router",
+                                    "text": f"🟢 [NVIDIA NIM] {model} respondendo (streaming)...",
+                                    "log_type": "info"
+                                })
+                            parts.append(delta)
+                    full = "".join(parts)
+                    if full.strip():
+                        return full
+                    # Resposta vazia → trata como falha e tenta o próximo modelo
+                    raise RuntimeError(f"modelo '{model}' retornou resposta vazia")
 
                 except Exception as e:
                     err_str = str(e).lower()
                     # Verificar 429 ou limite de taxa
                     if "429" in err_str or "rate limit" in err_str or "quota" in err_str:
+                        prev_idx = self.key_index
                         _safe_print(f"⚠️ [NVIDIA Router] 429 na chave {self.key_index} com modelo {model}. Rotacionando...")
                         self._rotate_key()
                         failed_keys_in_loop += 1
+                        # Visível na UI (antes só ia pro console do servidor)
+                        if broadcaster_fn:
+                            await broadcaster_fn({
+                                "type": "terminal_log",
+                                "worker_id": "nvidia_router",
+                                "text": f"🔄 [NVIDIA Pool] 429 na chave #{prev_idx} — rotacionando para a chave #{self.key_index} ({len(self.api_keys)} no pool).",
+                                "log_type": "warning"
+                            })
 
                         if failed_keys_in_loop >= len(self.api_keys):
                             _safe_print(f"🚨 [NVIDIA Router] Todas as chaves atingiram o limite para {model}. Tentando próximo modelo...")
+                            if broadcaster_fn:
+                                await broadcaster_fn({
+                                    "type": "terminal_log",
+                                    "worker_id": "nvidia_router",
+                                    "text": f"🚨 [NVIDIA Pool] Todas as {len(self.api_keys)} chaves no limite para {model}. Passando para o próximo modelo.",
+                                    "log_type": "error"
+                                })
                             model_index += 1
                             failed_keys_in_loop = 0
                             await asyncio.sleep(2)
@@ -191,6 +235,46 @@ class NvidiaRouter:
                 entry["error"] = str(e)[:160]
             results.append(entry)
         return results
+
+    async def probe_model(self, model: str, key: Optional[str] = None, timeout: float = 120.0) -> Dict[str, Any]:
+        """Testa INFERÊNCIA REAL de um modelo: um chat mínimo em streaming, sucesso no
+        1º token. Diferente de list_catalog()/validate_keys() (que só checam a chave e o
+        catálogo via GET /v1/models e não provam que o modelo serve chat agora)."""
+        if not OPENAI_AVAILABLE:
+            return {"model": model, "alive": False, "latency": None, "error": "openai não instalado"}
+        if not self.api_keys and not key:
+            return {"model": model, "alive": False, "latency": None, "error": "sem chaves"}
+        use_key = key or self.api_keys[self.key_index % len(self.api_keys)]
+        client = AsyncOpenAI(base_url=NVIDIA_BASE_URL, api_key=use_key, timeout=timeout, max_retries=0)
+        t0 = time.time()
+        try:
+            stream = await client.chat.completions.create(
+                model=model,
+                messages=[{"role": "user", "content": "Reply with only: ok"}],
+                temperature=0, max_tokens=64, stream=True
+            )
+            reachable = False   # recebeu QUALQUER chunk → o modelo está servindo inferência
+            got_content = False  # emitiu texto em delta.content
+            async for chunk in stream:
+                reachable = True
+                if chunk.choices:
+                    delta = chunk.choices[0].delta
+                    # modelos reasoning podem colocar a saída em reasoning_content
+                    if getattr(delta, "content", None) or getattr(delta, "reasoning_content", None):
+                        got_content = True
+                        break
+            try:
+                await stream.close()
+            except Exception:
+                pass
+            dt = round(time.time() - t0, 1)
+            if reachable:
+                # serve inferência; nota se só veio raciocínio (sem texto ainda)
+                note = None if got_content else "responde (só raciocínio no teste curto)"
+                return {"model": model, "alive": True, "latency": dt, "error": note}
+            return {"model": model, "alive": False, "latency": dt, "error": "resposta vazia"}
+        except Exception as e:
+            return {"model": model, "alive": False, "latency": round(time.time() - t0, 1), "error": str(e)[:140]}
 
     async def execute_layer2(self, system_prompt: str, user_content: str, broadcaster_fn=None) -> str:
         """Atalho para Camada 2 (Gerencial — DeepSeek-R1 com fallback Llama)."""

@@ -1,0 +1,400 @@
+const canvas = document.getElementById('fps-canvas');
+const ctx = canvas.getContext('2d');
+const scoreDisplay = document.getElementById('score-display');
+const healthDisplay = document.getElementById('health-display');
+const pointsDisplay = document.getElementById('points-display');
+const enemiesDisplay = document.getElementById('enemies-display');
+
+const MAP = [
+  [1,1,1,1,1,1,1,1,1,1],
+  [1,0,0,0,0,0,0,0,0,1],
+  [1,0,1,1,0,1,0,1,0,1],
+  [1,0,0,0,0,0,0,0,0,1],
+  [1,0,1,0,1,1,0,1,0,1],
+  [1,0,0,0,0,0,0,0,0,1],
+  [1,0,1,0,1,0,1,1,0,1],
+  [1,0,0,0,0,0,0,0,0,1],
+  [1,0,1,0,1,0,1,0,0,1],
+  [1,1,1,1,1,1,1,1,1,1]
+];
+const TILE = 1;
+const FOV = Math.PI / 3;
+const NUM_RAYS = 320;
+const ENEMY_COUNT = 8;
+
+const player = { x: 1.5, y: 1.5, angle: 0, pitch: 0, health: 100, score: 0 };
+const keys = {};
+let enemies = [];
+let lastTime = 0;
+let gameOverFlag = false;
+let muzzleFlash = 0;
+let tracers = [];
+
+function resizeCanvas() {
+  const wrapper = canvas.parentElement;
+  const rect = wrapper.getBoundingClientRect();
+  const w = rect.width;
+  const h = w * 9 / 16;
+  canvas.width = w;
+  canvas.height = h;
+  canvas.style.width = w + 'px';
+  canvas.style.height = h + 'px';
+}
+
+function isWall(x, y) {
+  const tx = Math.floor(x);
+  const ty = Math.floor(y);
+  if (tx < 0 || tx >= 10 || ty < 0 || ty >= 10) return true;
+  return MAP[ty][tx] === 1;
+}
+
+function spawnEnemies() {
+  enemies = [];
+  for (let i = 0; i < ENEMY_COUNT; i++) {
+    let x, y;
+    do {
+      x = Math.random() * 8 + 1;
+      y = Math.random() * 8 + 1;
+    } while (isWall(x, y) || (Math.abs(x - player.x) < 1 && Math.abs(y - player.y) < 1));
+    enemies.push({ x, y, alive: true });
+  }
+  updateEnemiesDisplay();
+}
+
+function updateEnemiesDisplay() {
+  const alive = enemies.filter(e => e.alive).length;
+  enemiesDisplay.textContent = alive;
+}
+
+function updateScore() {
+  scoreDisplay.textContent = player.score;
+  pointsDisplay.textContent = player.score;
+}
+
+function updateHealth() {
+  healthDisplay.textContent = player.health;
+}
+
+function gameOver() {
+  gameOverFlag = true;
+  const finalScoreEl = document.getElementById('fps-final-score');
+  if (finalScoreEl) finalScoreEl.textContent = player.score;
+  const overlay = document.getElementById('fps-gameover');
+  if (overlay) overlay.classList.remove('hidden');
+}
+
+function movePlayer(dt) {
+  const speed = 3 * dt;
+  let dx = 0, dy = 0;
+  if (keys['w'] || keys['arrowup']) { dx += Math.cos(player.angle); dy += Math.sin(player.angle); }
+  if (keys['s'] || keys['arrowdown']) { dx -= Math.cos(player.angle); dy -= Math.sin(player.angle); }
+  if (keys['a'] || keys['arrowleft']) { dx += Math.cos(player.angle + Math.PI/2); dy += Math.sin(player.angle + Math.PI/2); }
+  if (keys['d'] || keys['arrowright']) { dx += Math.cos(player.angle - Math.PI/2); dy += Math.sin(player.angle - Math.PI/2); }
+  if (dx !== 0 || dy !== 0) {
+    const len = Math.hypot(dx, dy);
+    dx /= len; dy /= len;
+    const margin = 0.2;
+    const newX = player.x + dx * speed;
+    const newY = player.y + dy * speed;
+    if (!isWall(newX + (dx > 0 ? margin : -margin), player.y)) player.x = newX;
+    if (!isWall(player.x, newY + (dy > 0 ? margin : -margin))) player.y = newY;
+  }
+}
+
+function shoot() {
+  if (document.pointerLockElement !== canvas) return;
+  muzzleFlash = 1;
+  tracers.push({ x1: canvas.width/2, y1: canvas.height*0.85, x2: canvas.width/2, y2: canvas.height/2, life: 1 });
+  const dirX = Math.cos(player.angle);
+  const dirY = Math.sin(player.angle);
+  let hit = null;
+  let minDist = Infinity;
+  for (let e of enemies) {
+    if (!e.alive) continue;
+    const dx = e.x - player.x;
+    const dy = e.y - player.y;
+    const proj = dx * dirX + dy * dirY;
+    if (proj < 0) continue;
+    const closestX = player.x + dirX * proj;
+    const closestY = player.y + dirY * proj;
+    const dist = Math.hypot(closestX - e.x, closestY - e.y);
+    if (dist < 0.3) {
+      if (proj < minDist) {
+        minDist = proj;
+        hit = e;
+      }
+    }
+  }
+  if (hit) {
+    hit.alive = false;
+    player.score += 10;
+    updateScore();
+    updateEnemiesDisplay();
+    setTimeout(() => {
+      let x, y;
+      do {
+        x = Math.random() * 8 + 1;
+        y = Math.random() * 8 + 1;
+      } while (isWall(x, y) || (Math.abs(x - player.x) < 1 && Math.abs(y - player.y) < 1));
+      hit.x = x;
+      hit.y = y;
+      hit.alive = true;
+      updateEnemiesDisplay();
+    }, 2000);
+  }
+}
+
+function checkEnemyCollision() {
+  for (let e of enemies) {
+    if (!e.alive) continue;
+    const dist = Math.hypot(e.x - player.x, e.y - player.y);
+    if (dist < 0.5) {
+      player.health -= 1;
+      updateHealth();
+      if (player.health <= 0) {
+        gameOver();
+        return;
+      }
+    }
+  }
+}
+
+function render() {
+  const w = canvas.width;
+  const h = canvas.height;
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, w, h);
+
+  const planeX = Math.sin(player.angle) * Math.tan(FOV/2);
+  const planeY = -Math.cos(player.angle) * Math.tan(FOV/2);
+  const dirX = Math.cos(player.angle);
+  const dirY = Math.sin(player.angle);
+
+  const zBuffer = new Array(NUM_RAYS);
+
+  for (let x = 0; x < NUM_RAYS; x++) {
+    const cameraX = 2 * x / NUM_RAYS - 1;
+    const rayDirX = dirX + planeX * cameraX;
+    const rayDirY = dirY + planeY * cameraX;
+
+    let mapX = Math.floor(player.x);
+    let mapY = Math.floor(player.y);
+    const deltaDistX = Math.abs(1 / rayDirX);
+    const deltaDistY = Math.abs(1 / rayDirY);
+    let stepX, stepY, sideDistX, sideDistY;
+
+    if (rayDirX < 0) {
+      stepX = -1;
+      sideDistX = (player.x - mapX) * deltaDistX;
+    } else {
+      stepX = 1;
+      sideDistX = (mapX + 1 - player.x) * deltaDistX;
+    }
+    if (rayDirY < 0) {
+      stepY = -1;
+      sideDistY = (player.y - mapY) * deltaDistY;
+    } else {
+      stepY = 1;
+      sideDistY = (mapY + 1 - player.y) * deltaDistY;
+    }
+
+    let hit = false;
+    let side = 0;
+    while (!hit) {
+      if (sideDistX < sideDistY) {
+        sideDistX += deltaDistX;
+        mapX += stepX;
+        side = 0;
+      } else {
+        sideDistY += deltaDistY;
+        mapY += stepY;
+        side = 1;
+      }
+      if (mapX < 0 || mapX >= 10 || mapY < 0 || mapY >= 10) break;
+      if (MAP[mapY][mapX] === 1) hit = true;
+    }
+
+    let perpDist;
+    if (!hit) {
+      perpDist = 1000;
+    } else if (side === 0) {
+      perpDist = sideDistX - deltaDistX;
+    } else {
+      perpDist = sideDistY - deltaDistY;
+    }
+    zBuffer[x] = perpDist;
+
+    const lineHeight = h / perpDist;
+    let drawStart = -lineHeight / 2 + h / 2;
+    if (drawStart < 0) drawStart = 0;
+    let drawEnd = lineHeight / 2 + h / 2;
+    if (drawEnd >= h) drawEnd = h - 1;
+
+    const shade = side === 0 ? 255 : 180;
+    ctx.fillStyle = `rgb(${shade},${shade*0.8},${shade*0.6})`;
+    ctx.fillRect(x * (w / NUM_RAYS), drawStart, w / NUM_RAYS + 1, drawEnd - drawStart);
+  }
+
+  // Draw enemies as billboards
+  const sortedEnemies = enemies.filter(e => e.alive).sort((a, b) => {
+    const da = Math.hypot(a.x - player.x, a.y - player.y);
+    const db = Math.hypot(b.x - player.x, b.y - player.y);
+    return db - da;
+  });
+
+  for (let e of sortedEnemies) {
+    const dx = e.x - player.x;
+    const dy = e.y - player.y;
+    const dist = Math.hypot(dx, dy);
+    const invDet = 1.0 / (planeX * dirY - dirX * planeY);
+    const transformX = invDet * (dirY * dx - dirX * dy);
+    const transformY = invDet * (-planeY * dx + planeX * dy);
+    if (transformY <= 0.1) continue;
+
+    const screenX = (w / 2) * (1 + transformX / transformY);
+    const spriteHeight = h / transformY;
+    const spriteWidth = spriteHeight * 0.6;
+    const drawStartY = -spriteHeight / 2 + h / 2;
+    const drawStartX = -spriteWidth / 2 + screenX;
+
+    // Check z-buffer occlusion
+    let visible = false;
+    for (let i = 0; i < NUM_RAYS; i++) {
+      const rayX = (i / NUM_RAYS) * w;
+      if (rayX >= drawStartX && rayX <= drawStartX + spriteWidth) {
+        if (transformY < zBuffer[i]) {
+          visible = true;
+          break;
+        }
+      }
+    }
+    if (!visible) continue;
+
+    ctx.fillStyle = '#cc0000';
+    ctx.strokeStyle = '#ffaaaa';
+    ctx.lineWidth = 1.5;
+    // Cabeça
+    ctx.beginPath();
+    ctx.arc(drawStartX + spriteWidth * 0.5, drawStartY + spriteHeight * 0.1, spriteWidth * 0.12, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    // Tronco
+    ctx.fillRect(drawStartX + spriteWidth * 0.3, drawStartY + spriteHeight * 0.22, spriteWidth * 0.4, spriteHeight * 0.35);
+    ctx.strokeRect(drawStartX + spriteWidth * 0.3, drawStartY + spriteHeight * 0.22, spriteWidth * 0.4, spriteHeight * 0.35);
+    // Braços
+    ctx.fillRect(drawStartX + spriteWidth * 0.18, drawStartY + spriteHeight * 0.25, spriteWidth * 0.08, spriteHeight * 0.25);
+    ctx.strokeRect(drawStartX + spriteWidth * 0.18, drawStartY + spriteHeight * 0.25, spriteWidth * 0.08, spriteHeight * 0.25);
+    ctx.fillRect(drawStartX + spriteWidth * 0.74, drawStartY + spriteHeight * 0.25, spriteWidth * 0.08, spriteHeight * 0.25);
+    ctx.strokeRect(drawStartX + spriteWidth * 0.74, drawStartY + spriteHeight * 0.25, spriteWidth * 0.08, spriteHeight * 0.25);
+    // Pernas
+    ctx.fillRect(drawStartX + spriteWidth * 0.26, drawStartY + spriteHeight * 0.60, spriteWidth * 0.14, spriteHeight * 0.35);
+    ctx.strokeRect(drawStartX + spriteWidth * 0.26, drawStartY + spriteHeight * 0.60, spriteWidth * 0.14, spriteHeight * 0.35);
+    ctx.fillRect(drawStartX + spriteWidth * 0.60, drawStartY + spriteHeight * 0.60, spriteWidth * 0.14, spriteHeight * 0.35);
+    ctx.strokeRect(drawStartX + spriteWidth * 0.60, drawStartY + spriteHeight * 0.60, spriteWidth * 0.14, spriteHeight * 0.35);
+  }
+
+  // Crosshair
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(w/2 - 2, h/2 - 10, 4, 20);
+  ctx.fillRect(w/2 - 10, h/2 - 2, 20, 4);
+
+  // Mãos e Arma (View Model)
+  ctx.save();
+  ctx.translate(w/2, h * 0.85);
+  ctx.rotate(player.pitch * 0.5);
+  // Arma
+  ctx.fillStyle = '#222';
+  ctx.fillRect(-15, -10, 30, 50);
+  ctx.fillStyle = '#444';
+  ctx.fillRect(-5, -15, 10, 10);
+  // Mãos
+  ctx.fillStyle = '#cc8866';
+  ctx.fillRect(-25, 0, 15, 25);
+  ctx.fillRect(10, 0, 15, 25);
+  ctx.restore();
+
+  // Muzzle Flash e Bullet Tracer
+  if (muzzleFlash > 0) {
+    ctx.save();
+    ctx.translate(w/2, h * 0.85 - 15);
+    ctx.fillStyle = `rgba(255, 200, 0, ${muzzleFlash})`;
+    ctx.beginPath();
+    ctx.arc(0, 0, 15 * muzzleFlash, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+    muzzleFlash -= 0.1;
+  }
+  for (let i = tracers.length - 1; i >= 0; i--) {
+    const t = tracers[i];
+    ctx.strokeStyle = `rgba(255, 255, 100, ${t.life})`;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(t.x1, t.y1);
+    ctx.lineTo(t.x2, t.y2);
+    ctx.stroke();
+    t.life -= 0.05;
+    if (t.life <= 0) tracers.splice(i, 1);
+  }
+}
+
+function gameLoop(timestamp) {
+  const dt = Math.min((timestamp - lastTime) / 1000, 0.05);
+  lastTime = timestamp;
+  if (!gameOverFlag) {
+    movePlayer(dt);
+    checkEnemyCollision();
+    render();
+  }
+  requestAnimationFrame(gameLoop);
+}
+
+// Event listeners
+canvas.addEventListener('click', () => {
+  canvas.requestPointerLock();
+  shoot();
+});
+
+document.addEventListener('pointerlockchange', () => {
+  canvas.style.cursor = document.pointerLockElement === canvas ? 'none' : 'default';
+});
+
+document.addEventListener('mousemove', (e) => {
+  if (document.pointerLockElement === canvas) {
+    player.angle -= e.movementX * 0.003;
+    player.pitch -= e.movementY * 0.003;
+    player.pitch = Math.max(-Math.PI/3, Math.min(Math.PI/3, player.pitch));
+  }
+});
+
+document.addEventListener('mousedown', (e) => {
+  if (e.button === 0) shoot();
+});
+
+document.addEventListener('keydown', (e) => { keys[e.key.toLowerCase()] = true; });
+document.addEventListener('keyup', (e) => { keys[e.key.toLowerCase()] = false; });
+
+window.addEventListener('resize', resizeCanvas);
+
+const restartBtn = document.getElementById('fps-restart-btn');
+if (restartBtn) {
+  restartBtn.addEventListener('click', () => {
+    player.health = 100;
+    player.score = 0;
+    player.x = 1.5;
+    player.y = 1.5;
+    player.angle = 0;
+    gameOverFlag = false;
+    spawnEnemies();
+    updateHealth();
+    updateScore();
+    const overlay = document.getElementById('fps-gameover');
+    if (overlay) overlay.classList.add('hidden');
+    lastTime = performance.now();
+  });
+}
+
+resizeCanvas();
+spawnEnemies();
+updateScore();
+updateHealth();
+requestAnimationFrame(gameLoop);

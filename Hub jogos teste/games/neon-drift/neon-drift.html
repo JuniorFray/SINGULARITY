@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Neon Drift | Singularity</title>
+  <link rel="stylesheet" href="../../css/style.css" />
+  <link rel="stylesheet" href="../../css/neon-drift.css" />
+</head>
+<body class="game-page">
+  <nav class="game-nav">
+    <a href="../../index.html" class="nav-back">← Voltar</a>
+    <span class="nav-title">Neon Drift</span>
+    <span class="nav-score" id="nd-score-display">0</span>
+  </nav>
+  <main class="game-main">
+    <div class="nd-wrapper">
+      <canvas id="neon-drift-canvas"></canvas>
+      <div class="nd-hud">
+        <div class="nd-speed" id="nd-speed">0 km/h</div>
+        <div class="nd-score" id="nd-current-score">0</div>
+      </div>
+      <div class="nd-overlay" id="nd-overlay-start">
+        <div class="nd-card">
+          <h1>Neon Drift</h1>
+          <p>Deslize pelas ruas neon. Evite o tráfego e sobreviva o máximo que puder!</p>
+          <button class="nd-btn" id="nd-btn-start">Iniciar Corrida</button>
+        </div>
+      </div>
+      <div class="nd-overlay hidden" id="nd-overlay-gameover">
+        <div class="nd-card">
+          <h1>Game Over</h1>
+          <p>Pontuação Final: <span id="nd-final-score">0</span></p>
+          <p>Recorde: <span id="nd-high-score">0</span></p>
+          <button class="nd-btn" id="nd-btn-retry">Tentar Novamente</button>
+          <a href="../../index.html" class="nd-btn" style="background:transparent; border:1px solid #ff0055; color:#ff0055; margin-left: 1rem;">Hub</a>
+        </div>
+      </div>
+    </div>
+  </main>
+  <script src="neon-drift.js"></script>
+</body>
+</html>

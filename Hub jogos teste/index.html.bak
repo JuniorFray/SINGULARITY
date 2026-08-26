@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Nexus Games - Central de mini-jogos clássicos e modernos em visual cyberpunk.">
+  <meta name="theme-color" content="#0a0a14">
+  <title>Nexus Games | Hub</title>
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    /* Starfield specific styling */
+    #stars-layer {
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      pointer-events: none;
+      overflow: hidden;
+    }
+    .star {
+      position: absolute;
+      background: #fff;
+      border-radius: 50%;
+      opacity: var(--bright);
+      animation: twinkle var(--dur) infinite ease-in-out var(--delay);
+    }
+    @keyframes twinkle {
+      0%, 100% { opacity: var(--bright); transform: scale(1); }
+      50% { opacity: 0.1; transform: scale(0.6); }
+    }
+    
+    /* Hub Layout styles */
+    .hub-wrapper {
+      position: relative;
+      z-index: 1;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    .hub-header {
+      text-align: center;
+      padding: var(--sp-2xl) 0 var(--sp-lg);
+    }
+    .hub-logo {
+      font-size: clamp(2rem, 6vw, 3.5rem);
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: var(--sp-xs);
+    }
+    .hub-subtitle {
+      color: var(--clr-muted);
+      font-size: clamp(0.85rem, 3vw, 1.1rem);
+      max-width: 500px;
+      margin-inline: auto;
+      margin-bottom: var(--sp-xl);
+    }
+    .grid-cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: var(--sp-xl);
+      margin-bottom: var(--sp-3xl);
+    }
+    .game-card {
+      cursor: pointer;
+      outline: none;
+      display: flex;
+      flex-direction: column;
+    }
+    .game-card-body {
+      padding: var(--sp-xl);
+      display: flex;
+      flex-direction: column;
+      gap: var(--sp-md);
+      flex-grow: 1;
+    }
+    .game-card-icon {
+      font-size: 3rem;
+      margin-bottom: var(--sp-xs);
+    }
+    .game-card-title {
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: var(--clr-text);
+    }
+    .game-card-desc {
+      color: var(--clr-muted);
+      font-size: 0.9rem;
+      line-height: 1.5;
+      flex-grow: 1;
+    }
+    .game-card-stats {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-top: 1px solid var(--clr-border);
+      padding-top: var(--sp-md);
+      margin-top: var(--sp-sm);
+    }
+    .game-card-record {
+      font-size: 0.75rem;
+      color: var(--clr-muted);
+      display: flex;
+      flex-direction: column;
+    }
+    .record-val {
+      font-family: var(--font-display);
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: var(--clr-amber);
+    }
+    .hub-footer {
+      text-align: center;
+      padding: var(--sp-xl) 0;
+      color: var(--clr-muted);
+      font-size: 0.8rem;
+      border-top: 1px solid var(--clr-border);
+      margin-top: auto;
+    }
+    
+    /* Accent colors for cards hover glow */
+    .game-card:focus-visible,
+    .game-card:hover {
+      border-color: var(--card-glow-color, var(--clr-teal));
+      box-shadow: 0 10px 30px hsla(0, 0%, 0%, 0.6), 0 0 20px var(--card-glow-shadow, hsla(174, 90%, 55%, 0.2));
+    }
+    .card-memory {
+      --card-glow-color: var(--clr-teal);
+      --card-glow-shadow: hsla(174, 90%, 55%, 0.25);
+    }
+    .card-snake {
+      --card-glow-color: var(--color-green);
+      --card-glow-shadow: hsla(142, 70%, 45%, 0.25);
+    }
+    .card-racing {
+      --card-glow-color: var(--clr-rose);
+      --card-glow-shadow: hsla(345, 90%, 65%, 0.25);
+    }
+    .card-fps {
+      --card-glow-color: var(--clr-rose);
+      --card-glow-shadow: hsla(345, 90%, 65%, 0.25);
+    }
+    .glow-lime {
+      color: #32ff32;
+      text-shadow: 0 0 14px hsl(120 100% 50% / 0.7);
+    }
+  </style>
+</head>
+<body>
+  <div id="stars-layer"></div>
+  
+  <div class="hub-wrapper">
+    <header class="hub-header">
+      <div class="container">
+        <h1 class="hub-logo glow-lime">Nexus Games</h1>
+        <p class="hub-subtitle">Experimente os clássicos com estilo futurista e salve seus recordes localmente.</p>
+      </div>
+    </header>
+    
+    <main class="container">
+      <div class="grid-cards">
+        <!-- Card Jogo da Memória -->
+        <article class="card game-card card-memory" id="card-memoria">
+          <div class="game-card-body">
+            <div class="game-card-icon">🃏</div>
+            <h2 class="game-card-title">Jogo da Memória</h2>
+            <p class="game-card-desc">Exercite seu cérebro encontrando os pares de emojis sob pressão do relógio.</p>
+            <div class="game-card-stats">
+              <div class="game-card-record">
+                <span>RECORDE</span>
+                <span class="record-val" id="score-memoria">0 pts</span>
+              </div>
+              <a href="games/memoria.html" class="btn btn-primary btn-play">Jogar</a>
+            </div>
+          </div>
+        </article>
+        
+        <!-- Card Snake -->
+        <article class="card game-card card-snake" id="card-snake">
+          <div class="game-card-body">
+            <div class="game-card-icon">🐍</div>
+            <h2 class="game-card-title">Snake Clássico</h2>
+            <p class="game-card-desc">Controle a cobra, coma os itens luminosos e tente não colidir com seu corpo.</p>
+            <div class="game-card-stats">
+              <div class="game-card-record">
+                <span>RECORDE</span>
+                <span class="record-val" id="score-snake">0 pts</span>
+              </div>
+              <a href="games/snake.html" class="btn btn-primary btn-play" style="background: var(--color-green); border-color: var(--color-green);">Jogar</a>
+            </div>
+          </div>
+        </article>
+        
+        <!-- Card Racing -->
+        <article class="card game-card card-racing" id="card-racing">
+          <div class="game-card-body">
+            <div class="game-card-icon">🏎️</div>
+            <h2 class="game-card-title">Neon Racing</h2>
+            <p class="game-card-desc">Acelere na pista neon, desvie do tráfego e sobreviva o máximo de tempo possível.</p>
+            <div class="game-card-stats">
+              <div class="game-card-record">
+                <span>RECORDE</span>
+                <span class="record-val" id="score-racing">0 pts</span>
+              </div>
+              <a href="games/racing/racing.html" class="btn btn-primary btn-play" style="background: var(--clr-rose); border-color: var(--clr-rose);">Jogar</a>
+            </div>
+          </div>
+        </article>
+        
+        <!-- Card Neon Drift -->
+        <article class="card game-card card-racing" id="card-neon-drift">
+          <div class="game-card-body">
+            <div class="game-card-icon">🏎️</div>
+            <h2 class="game-card-title">Neon Drift</h2>
+            <p class="game-card-desc">Corrida arcade estilizada com visual cyberpunk. Deslize no asfalto neon e desvie do tráfego!</p>
+            <div class="game-card-stats">
+              <div class="game-card-record">
+                <span>RECORDE</span>
+                <span class="record-val" id="score-neon-drift">0 pts</span>
+              </div>
+              <a href="games/neon-drift/neon-drift.html" class="btn btn-primary btn-play" style="background: var(--clr-rose); border-color: var(--clr-rose);">Jogar</a>
+            </div>
+          </div>
+        </article>
+
+        <!-- Card FPS -->
+        <article class="card game-card card-fps" id="card-fps">
+          <div class="game-card-body">
+            <div class="game-card-icon">🔫</div>
+            <h2 class="game-card-title">CS Neon</h2>
+            <p class="game-card-desc">Jogo de tiro em primeira pessoa. Mire com o mouse, mova com setas/WASD e atire!</p>
+            <div class="game-card-stats">
+              <div class="game-card-record">
+                <span>RECORDE</span>
+                <span class="record-val" id="score-fps">0 pts</span>
+              </div>
+              <a href="games/fps/fps.html" class="btn btn-primary btn-play" style="background: var(--clr-rose); border-color: var(--clr-rose);">Jogar</a>
+            </div>
+          </div>
+        </article>
+      </div>
+    </main>
+    
+    <footer class="hub-footer">
+      <div class="container">
+        <p>&copy; <span id="footer-year">2026</span> Nexus Games. Desenvolvido com Glassmorphism.</p>
+      </div>
+    </footer>
+  </div>
+  
+  <script src="js/main.js"></script>
+</body>
+</html>

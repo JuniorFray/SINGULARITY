@@ -1,0 +1,159 @@
+/* snake.css — Snake Game Specific Styles */
+
+.snake-container {
+  padding-top: 0.75rem;
+  gap: 1rem;
+}
+
+/* Canvas Wrapper */
+.snake-canvas-wrapper {
+  position: relative;
+  width: 100%;
+  max-width: min(520px, 95vw);
+  aspect-ratio: 1 / 1;
+  border-radius: 16px;
+  overflow: hidden;
+  border: 1px solid var(--border-card);
+  box-shadow: 0 0 40px rgba(34, 197, 94, 0.1), inset 0 0 60px rgba(0,0,0,0.5);
+}
+
+#snake-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+
+/* Pause Overlay */
+.pause-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(10, 10, 20, 0.85);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  opacity: 0;
+  pointer-events: none;
+  backdrop-filter: blur(8px);
+  transition: opacity 0.2s ease;
+}
+
+.pause-overlay.visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.pause-overlay span {
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--color-green);
+  letter-spacing: 0.1em;
+}
+
+.pause-overlay small {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+/* Touch Controls */
+.touch-controls {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.touch-row {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.touch-btn {
+  width: clamp(52px, 13vw, 68px);
+  height: clamp(52px, 13vw, 68px);
+  border-radius: 12px;
+  border: 1px solid var(--border-card);
+  background: rgba(34, 197, 94, 0.08);
+  color: var(--color-green);
+  font-size: clamp(1rem, 3vw, 1.3rem);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  touch-action: manipulation;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.touch-btn:hover {
+  background: rgba(34, 197, 94, 0.2);
+  border-color: var(--color-green);
+}
+
+.touch-btn:active {
+  background: rgba(34, 197, 94, 0.3);
+  transform: scale(0.92);
+}
+
+.touch-pause {
+  width: auto;
+  padding: 0 1.5rem;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  background: transparent;
+}
+
+/* High score on desktop: hide touch controls */
+@media (hover: hover) and (pointer: fine) {
+  .touch-controls {
+    display: none;
+  }
+}
+
+/* Show on mobile regardless */
+@media (max-width: 600px) {
+  .touch-controls {
+    display: flex;
+  }
+}
+
+/* Difficulty */
+.difficulty-selector {
+  display: flex;
+  gap: 0.6rem;
+  justify-content: center;
+}
+
+.diff-btn {
+  flex: 1;
+  min-width: 80px;
+  padding: 0.6rem 1rem;
+  border: 1px solid var(--border-card);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: var(--font-body);
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.diff-btn:hover {
+  border-color: var(--color-green);
+  color: var(--color-green);
+  background: rgba(34, 197, 94, 0.08);
+}
+
+.diff-btn.active {
+  border-color: var(--color-green);
+  background: rgba(34, 197, 94, 0.15);
+  color: var(--color-green);
+  font-weight: 600;
+}

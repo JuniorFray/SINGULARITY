@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Snake - controle a cobra e colete frutas." />
+  <title>Snake | Mini Games Hub</title>
+  <link rel="stylesheet" href="../../css/style.css" />
+  <style>
+    #snake-canvas {
+      border-radius: var(--r-lg);
+      border: 1px solid var(--clr-border);
+      background: hsl(220 20% 9%);
+      display: block;
+      touch-action: none;
+      image-rendering: pixelated;
+      width: min(90vw, 420px);
+      height: min(90vw, 420px);
+    }
+    .controls { display: flex; gap: var(--sp-md); flex-wrap: wrap; justify-content: center; }
+    .stat-row { display: flex; gap: var(--sp-lg); flex-wrap: wrap; justify-content: center; }
+    .stat-item { display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 70px; }
+    .stat-label { font-size: 0.65rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--clr-muted); }
+    .stat-value { font-family: var(--font-display); font-size: 1.5rem; font-weight: 700; color: var(--clr-amber); }
+
+    /* D-Pad touch controls */
+    .dpad {
+      display: grid;
+      grid-template-areas: ". up ." "left . right" ". down .";
+      gap: 4px;
+      width: 160px;
+    }
+    .dpad-btn {
+      width: 48px; height: 48px; border-radius: var(--r-sm);
+      background: var(--clr-surface-2); border: 1px solid var(--clr-border);
+      color: var(--clr-text); font-size: 1.2rem; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: background var(--t-fast), transform var(--t-fast);
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+    }
+    .dpad-btn:active { background: var(--clr-amber); color: hsl(220 20% 7%); transform: scale(0.92); }
+    #dpad-up    { grid-area: up; }
+    #dpad-left  { grid-area: left; }
+    #dpad-right { grid-area: right; }
+    #dpad-down  { grid-area: down; }
+
+    @media (pointer: fine) { .dpad { display: none; } }
+  </style>
+</head>
+<body class="game-page">
+
+  <header class="game-header">
+    <a href="../../index.html" class="back-link" id="back-home">&#8592; Hub</a>
+    <h1 class="game-title">&#128013; Snake</h1>
+    <div class="stat-row">
+      <div class="stat-item">
+        <span class="stat-label">Pontos</span>
+        <span class="stat-value" id="score">0</span>
+      </div>
+      <div class="stat-item">
+        <span class="stat-label">Recorde</span>
+        <span class="stat-value" id="highscore">0</span>
+      </div>
+    </div>
+  </header>
+
+  <main class="game-main">
+    <div class="controls">
+      <button id="btn-start" class="btn btn-primary">&#9654; Iniciar</button>
+      <button id="btn-pause" class="btn btn-outline" disabled>&#9646;&#9646; Pausar</button>
+    </div>
+    <canvas id="snake-canvas" width="420" height="420" aria-label="Area do jogo Snake"></canvas>
+    <!-- D-Pad for touch -->
+    <div class="dpad" aria-label="Controles direcionais">
+      <button id="dpad-up"    class="dpad-btn" aria-label="Cima">&#8593;</button>
+      <button id="dpad-left"  class="dpad-btn" aria-label="Esquerda">&#8592;</button>
+      <button id="dpad-right" class="dpad-btn" aria-label="Direita">&#8594;</button>
+      <button id="dpad-down"  class="dpad-btn" aria-label="Baixo">&#8595;</button>
+    </div>
+  </main>
+
+  <!-- Game Over Modal -->
+  <div class="modal-overlay" id="gameover-modal" role="dialog" aria-modal="true" aria-labelledby="go-title">
+    <div class="modal-box">
+      <div style="font-size:3rem;margin-bottom:0.5rem">&#128128;</div>
+      <h2 class="glow-amber" id="go-title">Game Over</h2>
+      <p id="go-message">Sua pontuacao: 0</p>
+      <button id="btn-retry" class="btn btn-primary" style="width:100%">Tentar Novamente</button>
+    </div>
+  </div>
+
+  <script src="snake.js"></script>
+</body>
+</html>

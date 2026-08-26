@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Flappy Neon — o clássico Flappy Bird com visual cyberpunk!" />
+  <meta name="theme-color" content="#0a0a14" />
+  <title>Flappy Neon — Mini Jogos</title>
+  <link rel="stylesheet" href="../css/style.css" />
+  <link rel="stylesheet" href="../css/flappy.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet" />
+</head>
+<body class="game-page">
+
+  <!-- Start Overlay -->
+  <div class="game-overlay" id="overlay-flappy-start" role="dialog" aria-labelledby="flappy-start-title" aria-modal="true">
+    <div class="overlay-card">
+      <div class="overlay-icon">🐦</div>
+      <h1 class="overlay-title" id="flappy-start-title">Flappy Neon</h1>
+      <p class="overlay-subtitle">Toque, clique ou pressione espaço para voar. Desvie dos canos e alcance o recorde!</p>
+      <button class="btn btn-primary" id="btn-start-flappy" style="background: var(--clr-rose); color: hsl(220, 20%, 7%); border-color: var(--clr-rose); width: 100%;">
+        <span>Iniciar</span> <span>🚀</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Game Over Overlay -->
+  <div class="game-overlay hidden" id="overlay-flappy-gameover" role="dialog" aria-modal="true">
+    <div class="overlay-card">
+      <div class="overlay-icon">💀</div>
+      <h2 class="overlay-title">Game Over!</h2>
+      <p class="overlay-subtitle">Você colidiu com um cano!</p>
+      <div class="overlay-score" id="flappy-go-score">0 pts</div>
+      <div id="flappy-highscore-display" style="font-size:0.85rem; color: var(--color-gold); margin-bottom: var(--sp-md);">🏆 Recorde: 0</div>
+      <div style="display:flex; gap:0.75rem; justify-content:center; flex-wrap:wrap; width: 100%;">
+        <button class="btn btn-primary" id="btn-flappy-retry" style="background: var(--clr-rose); color: hsl(220, 20%, 7%); border-color: var(--clr-rose); flex: 1;">
+          🔄 De Novo
+        </button>
+        <a href="../index.html" class="btn btn-outline" style="text-decoration:none; flex: 1;">
+          🏠 Hub
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Navigation -->
+  <nav class="game-nav" aria-label="Navegação do jogo">
+    <a href="../index.html" class="nav-back" id="nav-back-flappy">← Voltar</a>
+    <span class="nav-title">🐦 Flappy Neon</span>
+    <div class="nav-score" id="flappy-nav-score" aria-live="polite">0 pts</div>
+  </nav>
+
+  <!-- Game Area -->
+  <main class="game-container">
+    <!-- Status -->
+    <div class="game-status" role="status" aria-live="polite">
+      <div class="status-item">
+        <span class="status-label">Pontos</span>
+        <span class="status-value" id="flappy-score">0</span>
+      </div>
+      <div class="status-item">
+        <span class="status-label">Recorde</span>
+        <span class="status-value" id="flappy-best">0</span>
+      </div>
+    </div>
+
+    <!-- Canvas -->
+    <div class="flappy-canvas-wrapper">
+      <canvas id="flappy-canvas" aria-label="Campo do jogo Flappy Bird"></canvas>
+    </div>
+
+    <!-- Touch Controls -->
+    <div class="touch-controls" id="touch-controls" aria-label="Controles de toque" role="group">
+      <button class="touch-btn" id="flappy-flap-btn" aria-label="Voar">🪽</button>
+    </div>
+  </main>
+
+  <script src="../js/flappy.js"></script>
+</body>
+</html>

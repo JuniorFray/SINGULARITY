@@ -13,6 +13,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const toggleRtk = document.getElementById('toggle-rtk');
     const toggleCaveman = document.getElementById('toggle-caveman');
     const toggleAutoRotate = document.getElementById('toggle-auto-rotate');
+    const toggleCliProviders = document.getElementById('toggle-cli-providers');
 
     const btnIncWorkers = document.getElementById('btn-inc-workers');
     const btnDecWorkers = document.getElementById('btn-dec-workers');
@@ -101,6 +102,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 syncSettings(data.settings);
                 break;
 
+            case 'state_cleared':
+                // Outra aba/cliente limpou tudo — reflete aqui também.
+                chatMessages.innerHTML = '<div class="chat-bubble system-bubble"><div class="bubble-title">🪐 Singularity Multi-Agent Ready</div><p>Sistema reiniciado. Pronto para nova missão.</p></div>';
+                planContainer.classList.add('hidden');
+                currentPlan = null;
+                break;
+
             case 'chat_message':
                 appendChatMessage(data.sender, data.text);
                 break;
@@ -127,6 +135,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 updateSingleWorkerCard(data.worker);
                 break;
 
+            case 'worker_task_done':
+                recordWorkerTask(data);
+                break;
+
             case 'workers_list_update':
                 renderWorkers(data.workers);
                 break;
@@ -149,6 +161,7 @@ document.addEventListener('DOMContentLoaded', () => {
         toggleRtk.checked = settings.use_rtk;
         toggleCaveman.checked = settings.use_caveman;
         toggleAutoRotate.checked = settings.auto_rotate_quota;
+        if (toggleCliProviders) toggleCliProviders.checked = settings.use_cli_providers;
         workersCountVal.textContent = settings.max_workers;
         const workDirInput = document.getElementById('work-dir-input');
         if (workDirInput && settings.active_work_dir) {
@@ -168,7 +181,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Load initial from localStorage
-    ['skip_permissions', 'use_rtk', 'use_caveman', 'auto_rotate_quota'].forEach(key => {
+    ['skip_permissions', 'use_rtk', 'use_caveman', 'auto_rotate_quota', 'use_cli_providers'].forEach(key => {
         const val = localStorage.getItem(`setting_${key}`);
         if (val !== null) {
             const isChecked = val === 'true';
@@ -176,6 +189,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (key === 'use_rtk') toggleRtk.checked = isChecked;
             if (key === 'use_caveman') toggleCaveman.checked = isChecked;
             if (key === 'auto_rotate_quota') toggleAutoRotate.checked = isChecked;
+            if (key === 'use_cli_providers' && toggleCliProviders) toggleCliProviders.checked = isChecked;
         }
     });
     const savedWorkers = localStorage.getItem('setting_max_workers');
@@ -186,6 +200,7 @@ document.addEventListener('DOMContentLoaded', () => {
     toggleRtk.addEventListener('change', (e) => sendSettingUpdate('use_rtk', e.target.checked));
     toggleCaveman.addEventListener('change', (e) => sendSettingUpdate('use_caveman', e.target.checked));
     toggleAutoRotate.addEventListener('change', (e) => sendSettingUpdate('auto_rotate_quota', e.target.checked));
+    if (toggleCliProviders) toggleCliProviders.addEventListener('change', (e) => sendSettingUpdate('use_cli_providers', e.target.checked));
 
     btnIncWorkers.addEventListener('click', () => {
         let current = parseInt(workersCountVal.textContent) || 2;
@@ -199,33 +214,113 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Chat Prompt
     btnSendPrompt.addEventListener('click', sendPrompt);
+    const btnAsk = document.getElementById('btn-ask');
+    if (btnAsk) btnAsk.addEventListener('click', sendAsk);
     promptInput.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
             sendPrompt();
         }
+        // Shift+Enter = quebra de linha (textarea maior). Ctrl+Enter = Perguntar (chat).
+        if (e.key === 'Enter' && e.ctrlKey) {
+            e.preventDefault();
+            sendAsk();
+        }
     });
+
+    let conversationActive = false;  // true após usar 💬 Perguntar (permite Gerar Plano da conversa)
+
+    function currentSkill() {
+        const sel = document.getElementById('skill-select');
+        return sel ? sel.value : 'auto';
+    }
+    function currentTargetDir() {
+        const workDirInput = document.getElementById('work-dir-input');
+        return workDirInput ? workDirInput.value.trim() : 'D:\\APP android teste';
+    }
 
     function sendPrompt() {
         const prompt = promptInput.value.trim();
-        if (!prompt) return;
-
-        appendChatMessage('user', prompt);
+        // Caixa vazia sem conversa → avisa em vez de ficar mudo/parado.
+        if (!prompt && !conversationActive) {
+            appendChatMessage('orchestrator', '⚠️ Digite o objetivo na caixa, ou use 💬 Perguntar para refinar antes de Gerar Plano.');
+            return;
+        }
+        if (prompt) appendChatMessage('user', prompt);
         promptInput.value = '';
-
-        const workDirInput = document.getElementById('work-dir-input');
-        const targetDir = workDirInput ? workDirInput.value.trim() : 'D:\\APP android teste';
+        // Feedback imediato (não fica sem resposta enquanto a Camada 1/2 pensa)
+        appendChatMessage('orchestrator', prompt ? '🚀 Gerando plano...' : '🚀 Gerando plano a partir da conversa...');
 
         if (ws && ws.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify({
                 type: 'user_prompt',
                 prompt: prompt,
-                work_dir: targetDir
+                work_dir: currentTargetDir(),
+                skill_id: currentSkill()
             }));
         }
     }
 
+    // Chat conversacional (Q&A grátis) — não executa plano, só conversa/refina.
+    function sendAsk() {
+        const message = promptInput.value.trim();
+        if (!message) return;
+        conversationActive = true;
+        appendChatMessage('user', message);
+        promptInput.value = '';
+        showTyping();
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({
+                type: 'chat_query',
+                message: message,
+                work_dir: currentTargetDir(),
+                skill_id: currentSkill()
+            }));
+        }
+    }
+
+    // Popula o seletor de skills (presets por tipo de projeto)
+    async function loadSkills() {
+        const sel = document.getElementById('skill-select');
+        if (!sel) return;
+        try {
+            const res = await fetch('/api/skills');
+            const data = await res.json();
+            sel.innerHTML = '';
+            (data.skills || []).forEach(s => {
+                const o = document.createElement('option');
+                o.value = s.id;
+                o.textContent = `${s.icon} ${s.name}`;
+                o.title = s.description;
+                sel.appendChild(o);
+            });
+            const saved = localStorage.getItem('setting_skill_id');
+            if (saved) sel.value = saved;
+            sel.addEventListener('change', () => localStorage.setItem('setting_skill_id', sel.value));
+        } catch (e) { console.error('Erro ao carregar skills:', e); }
+    }
+    loadSkills();
+
+    function showTyping() {
+        removeTyping();
+        const div = document.createElement('div');
+        div.id = 'chat-typing';
+        div.className = 'chat-bubble system-bubble typing-bubble';
+        div.innerHTML = `
+            <div class="bubble-title">🧠 Claude Orquestrador</div>
+            <div class="typing-dots"><span></span><span></span><span></span></div>
+        `;
+        chatMessages.appendChild(div);
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+    function removeTyping() {
+        const t = document.getElementById('chat-typing');
+        if (t) t.remove();
+    }
+
     function appendChatMessage(sender, text) {
+        // Chegou mensagem do orquestrador → some o "digitando..."
+        if (sender !== 'user') removeTyping();
         const div = document.createElement('div');
         div.className = `chat-bubble ${sender === 'user' ? 'user-bubble' : 'system-bubble'}`;
         
@@ -321,6 +416,19 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     let currentWorkersState = [];
+    // Histórico de tarefas por worker: { 'Worker-1': [{title, status, seconds}], ... }
+    const workerHistory = {};
+
+    function recordWorkerTask(d) {
+        if (!d || !d.worker_id) return;
+        if (!workerHistory[d.worker_id]) workerHistory[d.worker_id] = [];
+        workerHistory[d.worker_id].push({
+            title: d.title || `Tarefa #${d.task_id}`,
+            status: d.status,
+            seconds: d.seconds
+        });
+        renderWorkers(currentWorkersState);
+    }
 
     function updateSingleWorkerCard(worker) {
         const idx = currentWorkersState.findIndex(w => w.id === worker.id);
@@ -344,28 +452,59 @@ document.addEventListener('DOMContentLoaded', () => {
         workers.forEach(w => {
             const card = document.createElement('div');
             card.className = `worker-card ${w.is_busy ? 'busy' : ''}`;
+            // Worker OCIOSO mostra estado limpo (não repete o último job após F5/término).
+            const idle = !w.is_busy;
+            const provider = idle ? '—' : (w.provider || 'antigravity');
+            const profile = idle ? '—' : (w.profile || 'Padrão');
+            const model = idle ? '—' : (w.model || 'Padrão');
+            const taskText = idle ? 'Aguardando tarefa...' : (w.current_task || w.task || 'Executando...');
+            const hist = workerHistory[w.id] || [];
+            const histHtml = hist.length ? `
+                <div class="worker-history">
+                    ${hist.map(h => `
+                        <div class="worker-hist-item ${h.status === 'success' ? 'ok' : 'fail'}">
+                            <span class="hist-icon">${h.status === 'success' ? '✅' : '❌'}</span>
+                            <span class="hist-title" title="${escapeHtml(h.title)}">${escapeHtml(h.title)}</span>
+                            <span class="hist-time">${h.seconds != null ? h.seconds + 's' : ''}</span>
+                        </div>
+                    `).join('')}
+                </div>
+            ` : '';
             card.innerHTML = `
                 <div class="worker-card-header">
                     <span class="worker-card-title">👷 ${w.id}</span>
                     <span class="badge ${w.is_busy ? 'badge-purple' : 'badge-green'}">${w.is_busy ? 'Ocupado' : 'Livre'}</span>
                 </div>
                 <div class="worker-card-meta">
-                    <div>IA CLI: <strong>${w.provider || 'antigravity'}</strong></div>
-                    <div>Perfil: <strong>${w.profile || 'Padrão'}</strong></div>
-                    <div>Modelo: <strong>${w.model || 'Padrão'}</strong></div>
+                    <div>IA CLI: <strong>${provider}</strong></div>
+                    <div>Perfil: <strong>${profile}</strong></div>
+                    <div>Modelo: <strong>${model}</strong></div>
                 </div>
                 <div class="worker-task-desc">
-                    ${w.current_task || w.task || 'Aguardando tarefa...'}
+                    ${taskText}
                 </div>
+                ${histHtml}
             `;
             workersGrid.appendChild(card);
         });
     }
 
+    function escapeHtml(s) {
+        return String(s == null ? '' : s)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
     function appendLog(text, logType = 'info') {
         const line = document.createElement('div');
         line.className = `log-line ${logType}`;
-        line.textContent = text;
+        const now = new Date();
+        const ts = now.toTimeString().slice(0, 8); // HH:MM:SS
+        const timeSpan = document.createElement('span');
+        timeSpan.className = 'log-time';
+        timeSpan.textContent = ts;
+        line.appendChild(timeSpan);
+        line.appendChild(document.createTextNode(text));
         terminalBody.appendChild(line);
 
         if (chkAutoScroll.checked) {
@@ -380,12 +519,27 @@ document.addEventListener('DOMContentLoaded', () => {
     // Limpar tudo: terminal + chat + plano
     const btnClearAll = document.getElementById('btn-clear-all');
     if (btnClearAll) {
-        btnClearAll.addEventListener('click', () => {
+        btnClearAll.addEventListener('click', async () => {
             if (!confirm('Limpar terminal, chat e plano atual? Isso não afeta os arquivos do projeto.')) return;
+            // Limpa o estado NO SERVIDOR (chat + plano em disco) para que o refresh não
+            // reidrate tudo de volta via init_state do WebSocket.
+            try {
+                await fetch('/api/orchestrator/clear', { method: 'POST' });
+            } catch (e) {
+                console.error('Erro ao limpar estado no servidor:', e);
+            }
             terminalBody.innerHTML = '<div class="log-line info">[SINGULARITY] Sistema reiniciado. Aguardando nova missão...</div>';
             chatMessages.innerHTML = '<div class="chat-bubble system-bubble"><div class="bubble-title">🪐 Singularity Multi-Agent Ready</div><p>Sistema reiniciado. Pronto para nova missão.</p></div>';
             planContainer.classList.add('hidden');
             currentPlan = null;
+            conversationActive = false;
+            removeTyping();
+            // limpa o histórico de tarefas dos workers
+            Object.keys(workerHistory).forEach(k => delete workerHistory[k]);
+            renderWorkers(currentWorkersState);
+            // fecha o painel de relatório final se estiver aberto
+            const rp = document.getElementById('validation-report-panel');
+            if (rp) rp.classList.add('hidden');
             const alert = document.getElementById('execute-ready-alert');
             if (alert) alert.classList.add('hidden');
             const toast = document.getElementById('toast-ready');
@@ -724,6 +878,55 @@ document.addEventListener('DOMContentLoaded', () => {
         btnCheckCatalog.addEventListener('click', () => { checkNvidiaCatalog(); validateNvidiaKeys(); });
     }
 
+    // Probe de INFERÊNCIA REAL: chat streaming de 1 token em cada modelo configurado.
+    // "ON" passa a refletir se o modelo responde de fato (não só chave/catálogo).
+    async function probeModels() {
+        const note = document.getElementById('model-health-note');
+        const btn = document.getElementById('btn-probe-models');
+        if (note) note.textContent = '🩺 Testando inferência real dos modelos (pode levar até ~90s p/ modelos reasoning)...';
+        if (btn) { btn.disabled = true; }
+        try {
+            const res = await fetch('/api/nvidia-models/health', { method: 'POST' });
+            const data = await res.json();
+            if (data.status === 'no_keys') {
+                if (note) note.textContent = 'Sem chaves NVIDIA — adicione uma chave para testar.';
+                return;
+            }
+            const map = {};
+            (data.models || []).forEach(r => { map[r.model] = r; });
+            // Marca cada dropdown com o status real do seu modelo atual
+            LAYER_KEYS.forEach(key => {
+                const sel = document.getElementById('model-' + key);
+                if (!sel) return;
+                let span = document.getElementById('health-' + key);
+                if (!span) {
+                    span = document.createElement('span');
+                    span.id = 'health-' + key;
+                    span.style.cssText = 'font-size:10px; margin-left:8px; font-weight:600;';
+                    if (sel.parentNode) sel.parentNode.appendChild(span);
+                }
+                const r = map[sel.value];
+                if (!r) { span.textContent = ''; return; }
+                span.textContent = r.alive ? `✅ responde (${r.latency}s)` : `❌ ${r.error || 'falhou'}`;
+                span.style.color = r.alive ? '#34d399' : '#f87171';
+                sel.style.borderColor = r.alive ? '#34d399' : '#ef4444';
+            });
+            const alive = (data.models || []).filter(m => m.alive).length;
+            const total = (data.models || []).length;
+            if (note) note.textContent = `Inferência real: ${alive}/${total} modelos responderam. ❌ = não serve chat agora (mesmo aparecendo no catálogo).`;
+        } catch (e) {
+            console.error('Erro no probe de modelos:', e);
+            if (note) note.textContent = 'Erro ao testar inferência: ' + e;
+        } finally {
+            if (btn) { btn.disabled = false; }
+        }
+    }
+
+    const btnProbeModels = document.getElementById('btn-probe-models');
+    if (btnProbeModels) {
+        btnProbeModels.addEventListener('click', probeModels);
+    }
+
     // Diagnostics Modal Elements
     const btnOpenDiagnostics = document.getElementById('btn-open-diagnostics');
     const diagnosticsModal = document.getElementById('diagnostics-modal');
@@ -885,6 +1088,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         <td>${t.model}</td>
                         <td>${t.use_caveman ? '🦴 Caveman' : ''} ${t.use_rtk ? '🛠️ RTK' : ''}</td>
                         <td>${t.approx_tokens.toLocaleString()}</td>
+                        <td>${t.seconds != null ? t.seconds + 's' : '-'}</td>
                         <td><span class="badge ${t.status === 'success' ? 'badge-green' : 'badge-amber'}">${t.status}</span></td>
                     `;
                     tbody.appendChild(tr);
@@ -916,6 +1120,159 @@ document.addEventListener('DOMContentLoaded', () => {
             panel.classList.remove('hidden');
             content.innerText = report;
         }
+    }
+
+    // Fechar (X) o painel do Parecer Final — não tinha listener, por isso não fechava.
+    const btnCloseReport = document.getElementById('btn-close-report');
+    if (btnCloseReport) {
+        btnCloseReport.addEventListener('click', () => {
+            const panel = document.getElementById('validation-report-panel');
+            if (panel) panel.classList.add('hidden');
+        });
+    }
+
+    // ── MODAL SELETOR DE PASTAS ────────────────────────────────
+    const folderModal = document.getElementById('folder-modal');
+    const btnPickFolder = document.getElementById('btn-pick-folder');
+    const btnCloseFolderModal = document.getElementById('btn-close-folder-modal');
+    const btnCancelFolderModal = document.getElementById('btn-cancel-folder-modal');
+    const fsDrivesList = document.getElementById('fs-drives-list');
+    const fsCurrentPathInput = document.getElementById('fs-current-path-input');
+    const btnFsUp = document.getElementById('btn-fs-up');
+    const btnFsGo = document.getElementById('btn-fs-go');
+    const fsFolderList = document.getElementById('fs-folder-list');
+    const btnFsNative = document.getElementById('btn-fs-native');
+    const btnSelectCurrentFolder = document.getElementById('btn-select-current-folder');
+
+    let fsCurrentPath = '';
+    let fsParentPath = null;
+
+    async function loadFsFolder(targetPath) {
+        if (!fsFolderList) return;
+        fsFolderList.innerHTML = '<div style="color: var(--text-muted); padding: 12px; font-size: 11px;">⏳ Carregando pastas...</div>';
+        try {
+            const url = targetPath ? `/api/fs/browse?path=${encodeURIComponent(targetPath)}` : '/api/fs/browse';
+            const res = await fetch(url);
+            const data = await res.json();
+            if (data.status !== 'ok') {
+                fsFolderList.innerHTML = `<div style="color: #ff6b6b; padding: 12px; font-size: 11px;">❌ ${data.message || 'Erro ao carregar pasta'}</div>`;
+                return;
+            }
+
+            fsCurrentPath = data.current_path;
+            fsParentPath = data.parent_path;
+            if (fsCurrentPathInput) fsCurrentPathInput.value = data.current_path;
+
+            // Renderizar Drives
+            if (fsDrivesList && data.drives) {
+                fsDrivesList.innerHTML = '';
+                data.drives.forEach(drive => {
+                    const btn = document.createElement('button');
+                    btn.className = `fs-drive-btn ${fsCurrentPath.toUpperCase().startsWith(drive.toUpperCase()) ? 'active' : ''}`;
+                    btn.textContent = `💾 ${drive}`;
+                    btn.onclick = () => loadFsFolder(drive);
+                    fsDrivesList.appendChild(btn);
+                });
+            }
+
+            // Renderizar Pastas
+            fsFolderList.innerHTML = '';
+            if (data.folders.length === 0) {
+                fsFolderList.innerHTML = '<div style="color: var(--text-muted); padding: 12px; font-size: 11px;">📁 (Nenhuma subpasta encontrada nesta pasta)</div>';
+            } else {
+                data.folders.forEach(folder => {
+                    const row = document.createElement('div');
+                    row.className = 'fs-folder-item';
+                    row.innerHTML = `<span class="icon">📁</span> <span class="name">${escapeHtml(folder.name)}</span>`;
+                    row.onclick = () => loadFsFolder(folder.path);
+                    fsFolderList.appendChild(row);
+                });
+            }
+        } catch (e) {
+            fsFolderList.innerHTML = `<div style="color: #ff6b6b; padding: 12px; font-size: 11px;">❌ Falha na conexão: ${e}</div>`;
+        }
+    }
+
+    if (btnPickFolder) {
+        btnPickFolder.addEventListener('click', () => {
+            const currentVal = document.getElementById('work-dir-input')?.value?.trim();
+            if (folderModal) folderModal.classList.remove('hidden');
+            loadFsFolder(currentVal || '');
+        });
+    }
+
+    if (btnCloseFolderModal) {
+        btnCloseFolderModal.addEventListener('click', () => {
+            if (folderModal) folderModal.classList.add('hidden');
+        });
+    }
+
+    if (btnCancelFolderModal) {
+        btnCancelFolderModal.addEventListener('click', () => {
+            if (folderModal) folderModal.classList.add('hidden');
+        });
+    }
+
+    if (btnFsUp) {
+        btnFsUp.addEventListener('click', () => {
+            if (fsParentPath) loadFsFolder(fsParentPath);
+        });
+    }
+
+    if (btnFsGo) {
+        btnFsGo.addEventListener('click', () => {
+            const custom = fsCurrentPathInput?.value?.trim();
+            if (custom) loadFsFolder(custom);
+        });
+    }
+
+    if (fsCurrentPathInput) {
+        fsCurrentPathInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                const custom = fsCurrentPathInput.value.trim();
+                if (custom) loadFsFolder(custom);
+            }
+        });
+    }
+
+    if (btnSelectCurrentFolder) {
+        btnSelectCurrentFolder.addEventListener('click', () => {
+            const input = document.getElementById('work-dir-input');
+            const chosen = fsCurrentPathInput?.value?.trim() || fsCurrentPath;
+            if (input && chosen) {
+                input.value = chosen;
+                sendSettingUpdate('active_work_dir', chosen);
+                appendLog(`[CONFIG] Pasta alvo definida: ${chosen}`, 'success');
+            }
+            if (folderModal) folderModal.classList.add('hidden');
+        });
+    }
+
+    if (btnFsNative) {
+        btnFsNative.addEventListener('click', async () => {
+            const orig = btnFsNative.textContent;
+            btnFsNative.textContent = '⏳ Abrindo...';
+            btnFsNative.disabled = true;
+            try {
+                const res = await fetch('/api/pick-folder', { method: 'POST' });
+                const data = await res.json();
+                if (data.status === 'ok' && data.path) {
+                    const input = document.getElementById('work-dir-input');
+                    if (input) input.value = data.path;
+                    sendSettingUpdate('active_work_dir', data.path);
+                    appendLog(`[CONFIG] Pasta alvo selecionada via Windows: ${data.path}`, 'success');
+                    if (folderModal) folderModal.classList.add('hidden');
+                } else if (data.status === 'error') {
+                    appendLog(`[CONFIG] ${data.message}`, 'warning');
+                }
+            } catch (e) {
+                appendLog(`[CONFIG] Falha: ${e}`, 'error');
+            } finally {
+                btnFsNative.textContent = orig;
+                btnFsNative.disabled = false;
+            }
+        });
     }
 
     connectWebSocket();

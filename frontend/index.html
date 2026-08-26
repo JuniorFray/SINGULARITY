@@ -8,7 +8,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="stylesheet" href="/static/css/style.css?v=10">
 </head>
 <body class="dark-theme">
     <div class="app-container">
@@ -54,6 +54,14 @@
                         <span class="slider round"></span>
                     </label>
                     <span class="toggle-label">🔄 Auto-Rotate</span>
+                </div>
+
+                <div class="toggle-group" title="Liga/desliga provedores CLI (Antigravity/Claude). Desligado = 100% NVIDIA, sem tentar o CLI (que hoje bate na cota).">
+                    <label class="switch">
+                        <input type="checkbox" id="toggle-cli-providers" checked>
+                        <span class="slider round"></span>
+                    </label>
+                    <span class="toggle-label">🖥️ CLI (Antigravity/Claude)</span>
                 </div>
 
                 <div class="workers-counter-group" title="Operários concorrentes em paralelo">
@@ -119,12 +127,20 @@
                 <div class="chat-input-area">
                     <div class="work-dir-bar" style="display: flex; align-items: center; gap: 8px; font-size: 11px;">
                         <span style="color: var(--text-muted); white-space: nowrap;">📁 Pasta Alvo:</span>
-                        <input type="text" id="work-dir-input" value="D:\APP android teste" style="width: 100%; background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 4px; padding: 4px 8px; color: var(--primary); font-family: var(--font-code); font-size: 11px;">
+                        <input type="text" id="work-dir-input" value="D:\Singularity - Sistema Orquestrador IA\Hub jogos teste" style="width: 100%; background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 4px; padding: 4px 8px; color: var(--primary); font-family: var(--font-code); font-size: 11px;">
+                        <button id="btn-pick-folder" title="Selecionar pasta (janela nativa)" style="background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 4px; padding: 4px 8px; color: var(--text-main); cursor: pointer; white-space: nowrap;">📂</button>
                     </div>
-                    <textarea id="prompt-input" placeholder="Digite o escopo ou ajuste do projeto..."></textarea>
-                    <button id="btn-send-prompt" class="btn btn-primary">
-                        <span>Gerar Plano</span> ➔
-                    </button>
+                    <div class="skill-bar" style="display:flex; align-items:center; gap:8px; font-size:11px;">
+                        <span style="color: var(--text-muted); white-space:nowrap;">🧩 Skill:</span>
+                        <select id="skill-select" title="Preset por tipo de projeto — ajusta o planejamento" style="flex:1; background: var(--card-bg); border:1px solid var(--border-color); border-radius:4px; padding:4px 8px; color: var(--text-main); font-size:11px;"></select>
+                    </div>
+                    <textarea id="prompt-input" placeholder="Descreva o projeto, tire dúvidas ou ajuste... (💬 Perguntar conversa; 🚀 Gerar Plano executa)"></textarea>
+                    <div class="input-actions" style="display:flex; gap:8px;">
+                        <button id="btn-ask" class="btn btn-outline" style="flex:1;" title="Conversar/refinar sem executar (grátis)">💬 Perguntar</button>
+                        <button id="btn-send-prompt" class="btn btn-primary" style="flex:1;">
+                            <span>🚀 Gerar Plano</span> ➔
+                        </button>
+                    </div>
                 </div>
             </section>
 
@@ -222,11 +238,13 @@
                 <!-- SEÇÃO 3: MODELOS POR CAMADA ──────────────────────────────── -->
                 <details class="prov-section" open>
                     <summary>🧠 Modelos por Camada</summary>
-                    <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 8px;">
+                    <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 8px; flex-wrap: wrap;">
                         <button class="btn btn-sm btn-outline" id="btn-check-catalog">🔄 Verificar catálogo</button>
+                        <button class="btn btn-sm btn-outline" id="btn-probe-models" title="Testa inferência REAL (chat streaming) dos modelos configurados, não só a chave/catálogo">🩺 Testar inferência real</button>
                         <span id="catalog-count" style="font-size: 11px; color: var(--text-muted);"></span>
                     </div>
                     <div id="catalog-alert" class="catalog-alert hidden"></div>
+                    <div id="model-health-note" style="font-size: 11px; color: var(--text-muted); margin-bottom: 6px;"></div>
                     <div class="layer-models-grid">
                         <label>Camada 1 — Fallback (Estratégica)
                             <select id="model-layer1_fallback_model" data-layer="layer1_fallback_model"></select>
@@ -319,11 +337,12 @@
                                 <th>Modelo</th>
                                 <th>Otimização</th>
                                 <th>Tokens Est.</th>
+                                <th>Tempo</th>
                                 <th>Status</th>
                             </tr>
                         </thead>
                         <tbody id="telemetry-table-body">
-                            <tr><td colspan="8" style="text-align: center; color: var(--text-muted);">Nenhuma execução recente gravada.</td></tr>
+                            <tr><td colspan="9" style="text-align: center; color: var(--text-muted);">Nenhuma execução recente gravada.</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -379,8 +398,41 @@
                 <div id="diagnostics-log-box" class="report-markdown-preview hidden" style="margin-top: 10px; max-height: 120px; font-size: 11px;"></div>
             </div>
         </div>
+    <!-- MODAL DE SELEÇÃO DE PASTA ALVO -->
+    <div class="modal-overlay hidden" id="folder-modal">
+        <div class="modal-box" style="max-width: 600px;">
+            <div class="modal-header">
+                <h3>📁 Selecionar Pasta Alvo do Projeto</h3>
+                <button class="btn-close" id="btn-close-folder-modal">✕</button>
+            </div>
+            <div class="modal-body">
+                <p class="help-text">Navegue pelas pastas ou selecione uma unidade abaixo:</p>
+                
+                <div style="display: flex; gap: 6px; margin-bottom: 10px; align-items: center; flex-wrap: wrap;" id="fs-drives-list">
+                    <!-- Drives botões injetados via JS -->
+                </div>
+
+                <div style="display: flex; gap: 6px; margin-bottom: 12px;">
+                    <button class="btn btn-sm btn-outline" id="btn-fs-up" title="Subir um nível">⬆️ Voltar</button>
+                    <input type="text" id="fs-current-path-input" style="flex: 1; background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 4px; padding: 6px 10px; color: var(--text-main); font-family: var(--font-code); font-size: 11px;">
+                    <button class="btn btn-sm btn-primary" id="btn-fs-go">Ir</button>
+                </div>
+
+                <div class="folder-list-container" id="fs-folder-list" style="max-height: 260px; min-height: 180px; overflow-y: auto; border: 1px solid var(--border-color); border-radius: 6px; padding: 6px; background: rgba(0,0,0,0.25); display: flex; flex-direction: column; gap: 2px;">
+                    <!-- Pastas injetadas via JS -->
+                </div>
+
+                <div style="display: flex; gap: 8px; margin-top: 14px; justify-content: space-between; align-items: center; flex-wrap: wrap;">
+                    <button class="btn btn-sm btn-outline" id="btn-fs-native" title="Abrir janela nativa do Windows">🪟 Janela do Windows</button>
+                    <div style="display: flex; gap: 8px;">
+                        <button class="btn btn-sm btn-outline" id="btn-cancel-folder-modal">Cancelar</button>
+                        <button class="btn btn-sm btn-primary" id="btn-select-current-folder">✅ Selecionar Esta Pasta</button>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
-    <script src="/static/js/app.js"></script>
+    <script src="/static/js/app.js?v=11"></script>
 </body>
 </html>

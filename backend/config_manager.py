@@ -20,18 +20,20 @@ class SettingsConfig(BaseModel):
     use_caveman: bool = True
     skip_permissions: bool = True
     auto_rotate_quota: bool = True
+    # Liga/desliga os provedores CLI (Antigravity/Claude Code). Quando False, o sistema
+    # nem tenta o CLI (que hoje bate na cota do Antigravity) — vai direto para o NVIDIA NIM.
+    use_cli_providers: bool = True
     max_workers: int = 2
     default_provider: str = "nvidia"
-    default_model: str = "meta/llama-3.1-8b-instruct"
+    default_model: str = "nvidia/nemotron-3-super-120b-a12b"
     active_work_dir: str = "D:\\APP android teste"
-    # Camada 1: Estratégica (Claude via CLI agy) — fallback NVIDIA dedicado,
-    # desacoplado da Camada 2 (antes reaproveitava layer2_model implicitamente).
-    layer1_fallback_model: str = "z-ai/glm-5.2"
-    # Camada 2: Gerencial (NVIDIA NIM) — contexto longo (1M) + raciocínio/coding SOTA
-    layer2_model: str = "z-ai/glm-5.2"
-    layer2_fallback_model: str = "meta/llama-3.3-70b-instruct"
-    # Camada 3: Operacional (NVIDIA NIM) — modelo dedicado a código (256k ctx)
-    layer3_model: str = "qwen/qwen3-coder-480b-a35b-instruct"
+    # Camada 1: Estratégica (Claude via CLI agy) — fallback NVIDIA dedicado
+    layer1_fallback_model: str = "nvidia/nemotron-3-super-120b-a12b"
+    # Camada 2: Gerencial (NVIDIA NIM) — contexto longo (1M) + raciocínio
+    layer2_model: str = "nvidia/nemotron-3-super-120b-a12b"
+    layer2_fallback_model: str = "nvidia/nemotron-3-nano-30b-a3b"
+    # Camada 3: Operacional (NVIDIA NIM) — modelo dedicado a código
+    layer3_model: str = "nvidia/nemotron-3-super-120b-a12b"
     layer3_fallback_model: str = "nvidia/nemotron-3-nano-30b-a3b"
     # Auto-Healing
     auto_healing_model: str = "nvidia/nemotron-3-nano-30b-a3b"

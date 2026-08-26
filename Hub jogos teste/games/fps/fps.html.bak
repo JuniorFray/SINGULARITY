@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FPS Arena | Nexus Games</title>
+  <link rel="stylesheet" href="../../css/style.css">
+  <link rel="stylesheet" href="../../css/fps.css">
+</head>
+<body>
+  <nav class="game-nav">
+    <a href="../../index.html" class="nav-back">← Voltar</a>
+    <span class="nav-title">FPS Arena</span>
+    <span class="nav-score" id="score-display">0</span>
+  </nav>
+  <main class="game-main">
+    <div class="fps-wrapper">
+      <canvas id="fps-canvas" width="800" height="450"></canvas>
+      <div class="crosshair"></div>
+      <div id="fps-gameover" class="fps-overlay hidden">
+        <div class="fps-overlay-card">
+          <h2>GAME OVER</h2>
+          <p>Pontuação: <span id="fps-final-score">0</span></p>
+          <button id="fps-restart-btn" class="btn btn-primary">Reiniciar</button>
+          <a href="../../index.html" class="btn btn-outline">Voltar ao Hub</a>
+        </div>
+      </div>
+    </div>
+    <div class="game-status">
+      <div class="status-item"><span class="status-label">Vida</span><span class="status-value" id="health-display">100</span></div>
+      <div class="status-item"><span class="status-label">Pontos</span><span class="status-value" id="points-display">0</span></div>
+      <div class="status-item"><span class="status-label">Inimigos</span><span class="status-value" id="enemies-display">0</span></div>
+    </div>
+  </main>
+  <script src="fps.js"></script>
+</body>
+</html>

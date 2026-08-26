@@ -13,6 +13,12 @@ from backend.config_manager import config_manager
 from backend.prompt_templates import LAYER2_MANAGER_PROMPT, CAVEMAN_PROMPT
 
 MAX_CONTEXT_CHARS = 400_000  # ~300k tokens de código (metade da janela para segurança)
+# Limite POR ARQUIVO. O valor antigo (5000) cortava arquivos reais do projeto
+# (ex: app.js de 24k → só 21% visível), impedindo a Camada 2 de embutir uma âncora
+# de patch correta e empurrando o operário a recriar/sobrescrever o arquivo (apagando
+# jogos). Elevado para caber os arquivos completos de um hub típico, com marcação
+# explícita quando ainda assim precisar truncar.
+PER_FILE_CHARS = 40_000
 
 
 def _read_project_files(work_dir: str, extensions: tuple = (".py", ".js", ".ts", ".html", ".css", ".json", ".md")) -> str:
@@ -27,6 +33,8 @@ def _read_project_files(work_dir: str, extensions: tuple = (".py", ".js", ".ts",
         # Ignorar diretórios de dependências
         dirs[:] = [d for d in dirs if d not in {"node_modules", ".git", "__pycache__", "venv", ".venv", "dist", "build"}]
         for fname in sorted(files):
+            if fname.endswith(".bak"):
+                continue  # ignorar backups gerados pelo próprio contrato de escrita
             if not any(fname.endswith(ext) for ext in extensions):
                 continue
             fpath = os.path.join(root, fname)
@@ -34,7 +42,11 @@ def _read_project_files(work_dir: str, extensions: tuple = (".py", ".js", ".ts",
             try:
                 with open(fpath, "r", encoding="utf-8", errors="replace") as f:
                     content = f.read()
-                entry = f"\n### {rel_path}\n```\n{content[:5000]}\n```\n"
+                if len(content) > PER_FILE_CHARS:
+                    body = content[:PER_FILE_CHARS] + "\n[...ARQUIVO TRUNCADO — maior que o limite por arquivo...]"
+                else:
+                    body = content
+                entry = f"\n### {rel_path}\n```\n{body}\n```\n"
                 total_chars += len(entry)
                 if total_chars > MAX_CONTEXT_CHARS:
                     context_parts.append("\n[...contexto truncado por limite de tokens...]")
@@ -111,30 +123,123 @@ class ManagerLayer:
                 broadcaster_fn=self.broadcaster_fn
             )
 
-            await self._broadcast("✅ [CAMADA 2] Grafo de tarefas gerado com sucesso!", "success")
             plan = _extract_json(raw_response)
             if plan and "tasks" in plan:
+                await self._broadcast("✅ [CAMADA 2] Grafo de tarefas gerado com sucesso!", "success")
                 return plan
-            else:
-                await self._broadcast("⚠️ [CAMADA 2] JSON inválido. Usando plano da Camada 1.", "warning")
-                return layer1_json
+
+            # AUTO-CORREÇÃO: JSON inválido → 1 re-prompt pedindo SÓ o JSON (igual ao operário).
+            await self._broadcast("🔧 [CAMADA 2] JSON inválido — pedindo correção ao modelo...", "warning")
+            fix_prompt = (
+                "Sua resposta anterior NÃO era um JSON válido com a chave 'tasks'. "
+                "Responda AGORA APENAS com o objeto JSON válido (começando com '{' e terminando com '}'), "
+                "sem texto fora do JSON, sem markdown e sem blocos <think>. Mantenha o conteúdo, só "
+                "corrija a sintaxe.\n\nSUA RESPOSTA ANTERIOR:\n" + (raw_response or "")[:6000]
+            )
+            try:
+                raw2 = await nvidia_router.execute_layer2(
+                    system_prompt=system_prompt,
+                    user_content=fix_prompt,
+                    broadcaster_fn=self.broadcaster_fn
+                )
+                plan2 = _extract_json(raw2)
+                if plan2 and "tasks" in plan2:
+                    await self._broadcast("✅ [CAMADA 2] JSON corrigido no re-prompt.", "success")
+                    return plan2
+            except Exception as e2:
+                print(f"[ManagerLayer] Re-prompt falhou: {e2}")
+
+            await self._broadcast("⚠️ [CAMADA 2] JSON ainda inválido após correção. Usando fallback.", "warning")
+            return layer1_json
 
         except Exception as e:
             await self._broadcast(f"❌ [CAMADA 2] Erro: {e}. Usando plano da Camada 1.", "error")
             return layer1_json
 
 
+def _balanced_from(t: str, start: int) -> Optional[str]:
+    """Bloco de chaves balanceado começando em `start` (ignora chaves dentro de strings)."""
+    depth = 0
+    in_str = False
+    esc = False
+    for j in range(start, len(t)):
+        c = t[j]
+        if in_str:
+            if esc:
+                esc = False
+            elif c == "\\":
+                esc = True
+            elif c == '"':
+                in_str = False
+            continue
+        if c == '"':
+            in_str = True
+        elif c == "{":
+            depth += 1
+        elif c == "}":
+            depth -= 1
+            if depth == 0:
+                return t[start:j + 1]
+    return None
+
+
+def _iter_balanced(t: str):
+    """Gera cada bloco `{...}` balanceado de nível superior, da esquerda para a direita.
+    Robusto a raciocínio/JSON inválido intercalado (ex: reasoning com `{a:b}` antes do JSON real)."""
+    i, n = 0, len(t)
+    while i < n:
+        if t[i] == "{":
+            block = _balanced_from(t, i)
+            if block:
+                yield block
+                i += len(block)
+                continue
+        i += 1
+
+
+def _try_load(raw: str) -> Optional[Dict[str, Any]]:
+    """Tenta carregar JSON; se falhar, aplica reparo leve (remove vírgula sobrando) e tenta de novo."""
+    import re
+    for attempt in (raw, re.sub(r",(\s*[}\]])", r"\1", raw)):
+        try:
+            obj = json.loads(attempt)
+            if isinstance(obj, dict):
+                return obj
+        except Exception:
+            continue
+    return None
+
+
 def _extract_json(text: str) -> Optional[Dict[str, Any]]:
+    """Extração TOLERANTE de JSON para modelos reasoning (glm-5.2 etc.): remove blocos <think>,
+    cercas de código, e tenta (a) cerca ```json, (b) chaves balanceadas mais externas,
+    (c) do primeiro '{' ao último '}'. Cada candidato passa por reparo leve."""
     import re
     if not text:
         return None
-    try:
-        match = re.search(r"```json\s*(\{.*?\})\s*```", text, re.DOTALL)
-        if match:
-            return json.loads(match.group(1))
-        match_raw = re.search(r"(\{.*\})", text, re.DOTALL)
-        if match_raw:
-            return json.loads(match_raw.group(1))
-    except Exception as e:
-        print(f"[ManagerLayer] Erro ao extrair JSON: {e}")
+    t = text.strip()
+    # Remove APENAS blocos de raciocínio FECHADOS (não apagar o resto quando <think> não fecha).
+    t = re.sub(r"<think>.*?</think>", "", t, flags=re.DOTALL | re.IGNORECASE)
+
+    candidates = []
+    fence = re.search(r"```(?:json)?\s*(\{.*\})\s*```", t, re.DOTALL)
+    if fence:
+        candidates.append(fence.group(1))
+    candidates.extend(_iter_balanced(t))  # todos os blocos {...} balanceados
+    first, last = t.find("{"), t.rfind("}")
+    if first != -1 and last > first:
+        candidates.append(t[first:last + 1])  # último recurso
+
+    parsed = []
+    for raw in candidates:
+        obj = _try_load(raw)
+        if obj is not None:
+            parsed.append(obj)
+    # Prefere o objeto que realmente é um plano (tem 'tasks')
+    for obj in parsed:
+        if "tasks" in obj:
+            return obj
+    if parsed:
+        return parsed[0]
+    print("[ManagerLayer] Nenhum JSON válido extraído da resposta da Camada 2.")
     return None

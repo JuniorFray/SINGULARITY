@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Racing — corra contra o relógio e desvie dos obstáculos na pista neon!" />
+  <meta name="theme-color" content="#0a0a14" />
+  <title>Racing — Mini Jogos</title>
+  <link rel="stylesheet" href="../../css/style.css" />
+  <link rel="stylesheet" href="../../css/racing.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet" />
+</head>
+<body class="game-page">
+
+  <!-- Start Overlay -->
+  <div class="game-overlay" id="overlay-racing-start" role="dialog" aria-labelledby="racing-start-title" aria-modal="true">
+    <div class="overlay-card">
+      <div class="overlay-icon">🏎️</div>
+      <h1 class="overlay-title" id="racing-start-title">Racing</h1>
+      <p class="overlay-subtitle">Use as setas do teclado ou os botões na tela para desviar dos obstáculos. Quanto mais longe, mais pontos!</p>
+      <div class="difficulty-selector" role="group" aria-label="Selecione a dificuldade">
+        <button class="diff-btn active" id="racing-easy" data-speed="3">Fácil</button>
+        <button class="diff-btn" id="racing-medium" data-speed="5">Médio</button>
+        <button class="diff-btn" id="racing-hard" data-speed="7">Difícil</button>
+      </div>
+      <button class="btn btn-primary" id="btn-start-racing" style="background: var(--clr-rose); color: hsl(220, 20%, 7%); border-color: var(--clr-rose); width: 100%;">
+        <span>Iniciar</span> <span>🚀</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Game Over Overlay -->
+  <div class="game-overlay hidden" id="overlay-racing-gameover" role="dialog" aria-modal="true">
+    <div class="overlay-card">
+      <div class="overlay-icon">💥</div>
+      <h2 class="overlay-title">Game Over!</h2>
+      <p class="overlay-subtitle" id="racing-go-msg">Você colidiu!</p>
+      <div class="overlay-score" id="racing-go-score">0 pts</div>
+      <div id="racing-highscore-display" style="font-size:0.85rem; color: var(--color-gold); margin-bottom: var(--sp-md);">🏆 Recorde: 0</div>
+      <div style="display:flex; gap:0.75rem; justify-content:center; flex-wrap:wrap; width: 100%;">
+        <button class="btn btn-primary" id="btn-racing-retry" style="background: var(--clr-rose); color: hsl(220, 20%, 7%); border-color: var(--clr-rose); flex: 1;">
+          🔄 De Novo
+        </button>
+        <a href="../../index.html" class="btn btn-outline" style="text-decoration:none; flex: 1;">
+          🏠 Hub
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Navigation -->
+  <nav class="game-nav" aria-label="Navegação do jogo">
+    <a href="../../index.html" class="nav-back" id="nav-back-racing">← Voltar</a>
+    <span class="nav-title">🏎️ Racing</span>
+    <div class="nav-score" id="racing-score-display" aria-live="polite">0 pts</div>
+  </nav>
+
+  <!-- Game Area -->
+  <main class="game-container racing-container">
+    <!-- Status -->
+    <div class="game-status" role="status" aria-live="polite">
+      <div class="status-item">
+        <span class="status-label">Distância</span>
+        <span class="status-value" id="racing-distance">0 m</span>
+      </div>
+      <div class="status-item">
+        <span class="status-label">Velocidade</span>
+        <span class="status-value" id="racing-speed">0 km/h</span>
+      </div>
+      <div class="status-item">
+        <span class="status-label">Recorde</span>
+        <span class="status-value" id="racing-best">0 m</span>
+      </div>
+    </div>
+
+    <!-- Canvas -->
+    <div class="racing-canvas-wrapper">
+      <canvas id="racing-canvas" aria-label="Campo do jogo Racing"></canvas>
+      <div class="pause-overlay" id="racing-pause-indicator" aria-hidden="true">
+        <span>⏸ PAUSADO</span>
+        <small>Pressione P para continuar</small>
+      </div>
+    </div>
+
+    <!-- Touch Controls -->
+    <div class="touch-controls" id="racing-touch-controls" aria-label="Controles de toque" role="group">
+      <div class="touch-row">
+        <button class="touch-btn" id="racing-touch-left" aria-label="Esquerda">◀</button>
+        <button class="touch-btn" id="racing-touch-right" aria-label="Direita">▶</button>
+      </div>
+      <div class="touch-row" style="margin-top:0.5rem;">
+        <button class="touch-btn touch-pause" id="racing-touch-pause" aria-label="Pausar">⏸</button>
+      </div>
+    </div>
+  </main>
+
+  <script src="../../js/racing.js"></script>
+</body>
+</html>

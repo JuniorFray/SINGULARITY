@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Snake — o clássico jogo da cobrinha no seu navegador!" />
+  <meta name="theme-color" content="#0a0a14" />
+  <title>Snake — Mini Jogos</title>
+  <link rel="stylesheet" href="../css/style.css" />
+  <link rel="stylesheet" href="../css/snake.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet" />
+</head>
+<body class="game-page">
+
+  <!-- Start Overlay -->
+  <div class="game-overlay" id="overlay-snake-start" role="dialog" aria-labelledby="snake-start-title" aria-modal="true">
+    <div class="overlay-card">
+      <div class="overlay-icon">🐍</div>
+      <h1 class="overlay-title" id="snake-start-title">Snake</h1>
+      <p class="overlay-subtitle">Use as setas do teclado ou os botões na tela para mover a cobra. Coma os pontos e cresça!</p>
+      <div class="difficulty-selector" role="group" aria-label="Selecione a velocidade">
+        <button class="diff-btn active" id="snake-slow" data-speed="200">Lento</button>
+        <button class="diff-btn" id="snake-medium" data-speed="130">Médio</button>
+        <button class="diff-btn" id="snake-fast" data-speed="75">Rápido</button>
+      </div>
+      <button class="btn btn-primary" id="btn-start-snake" style="background: var(--color-green); color: hsl(220, 20%, 7%); border-color: var(--color-green); width: 100%;">
+        <span>Iniciar</span> <span>🚀</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Game Over Overlay -->
+  <div class="game-overlay hidden" id="overlay-snake-gameover" role="dialog" aria-modal="true">
+    <div class="overlay-card">
+      <div class="overlay-icon">💀</div>
+      <h2 class="overlay-title">Game Over!</h2>
+      <p class="overlay-subtitle" id="snake-go-msg">A cobra colidiu!</p>
+      <div class="overlay-score" id="snake-go-score">0 pts</div>
+      <div id="snake-highscore-display" style="font-size:0.85rem; color: var(--color-gold); margin-bottom: var(--sp-md);">🏆 Recorde: 0</div>
+      <div style="display:flex; gap:0.75rem; justify-content:center; flex-wrap:wrap; width: 100%;">
+        <button class="btn btn-primary" id="btn-snake-retry" style="background: var(--color-green); color: hsl(220, 20%, 7%); border-color: var(--color-green); flex: 1;">
+          🔄 De Novo
+        </button>
+        <a href="../index.html" class="btn btn-outline" style="text-decoration:none; flex: 1;">
+          🏠 Hub
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Navigation -->
+  <nav class="game-nav" aria-label="Navegação do jogo">
+    <a href="../index.html" class="nav-back" id="nav-back-snake">← Voltar</a>
+    <span class="nav-title">🐍 Snake</span>
+    <div class="nav-score" id="snake-score-display" aria-live="polite">0 pts</div>
+  </nav>
+
+  <!-- Game Area -->
+  <main class="game-container snake-container">
+    <!-- Status -->
+    <div class="game-status" role="status" aria-live="polite">
+      <div class="status-item">
+        <span class="status-label">Pontos</span>
+        <span class="status-value" id="snake-score">0</span>
+      </div>
+      <div class="status-item">
+        <span class="status-label">Tamanho</span>
+        <span class="status-value" id="snake-length">1</span>
+      </div>
+      <div class="status-item">
+        <span class="status-label">Recorde</span>
+        <span class="status-value" id="snake-best">0</span>
+      </div>
+    </div>
+
+    <!-- Canvas -->
+    <div class="snake-canvas-wrapper">
+      <canvas id="snake-canvas" aria-label="Campo do jogo Snake"></canvas>
+      <div class="pause-overlay" id="snake-pause-indicator" aria-hidden="true">
+        <span>⏸ PAUSADO</span>
+        <small>Pressione P para continuar</small>
+      </div>
+    </div>
+
+    <!-- Touch Controls -->
+    <div class="touch-controls" id="touch-controls" aria-label="Controles de toque" role="group">
+      <div class="touch-row">
+        <button class="touch-btn" id="touch-up" aria-label="Cima">▲</button>
+      </div>
+      <div class="touch-row">
+        <button class="touch-btn" id="touch-left" aria-label="Esquerda">◀</button>
+        <button class="touch-btn" id="touch-down" aria-label="Baixo">▼</button>
+        <button class="touch-btn" id="touch-right" aria-label="Direita">▶</button>
+      </div>
+      <div class="touch-row" style="margin-top:0.5rem;">
+        <button class="touch-btn touch-pause" id="touch-pause" aria-label="Pausar">⏸</button>
+      </div>
+    </div>
+  </main>
+
+  <script src="../js/snake.js"></script>
+</body>
+</html>

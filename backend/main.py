@@ -57,12 +57,19 @@ orchestrator = OrchestratorEngine(broadcaster_fn=ws_manager.broadcast)
 class GoalRequest(BaseModel):
     macro_goal: str
     work_dir: Optional[str] = None
+    skill_id: Optional[str] = "auto"
+
+class ChatRequest(BaseModel):
+    message: str
+    work_dir: Optional[str] = None
+    skill_id: Optional[str] = "auto"
 
 class SettingsUpdateRequest(BaseModel):
     use_rtk: Optional[bool] = None
     use_caveman: Optional[bool] = None
     skip_permissions: Optional[bool] = None
     auto_rotate_quota: Optional[bool] = None
+    use_cli_providers: Optional[bool] = None
     max_workers: Optional[int] = None
     default_provider: Optional[str] = None
     # Modelos por camada (dropdowns da aba Provedores, populados pelo catálogo ao vivo)
@@ -191,15 +198,159 @@ def remove_profile(name: str):
     config_manager.remove_profile(name)
     return {"status": "success"}
 
+@app.get("/api/skills")
+def get_skills():
+    from backend.skills import list_skills
+    return {"skills": list_skills()}
+
 @app.post("/api/orchestrator/decompose")
 async def decompose_project(req: GoalRequest):
-    asyncio.create_task(orchestrator.decompose_goal(req.macro_goal, req.work_dir))
+    asyncio.create_task(orchestrator.decompose_goal(req.macro_goal, req.work_dir, req.skill_id or "auto"))
     return {"status": "started", "macro_goal": req.macro_goal}
+
+@app.post("/api/orchestrator/chat")
+async def orchestrator_chat(req: ChatRequest):
+    asyncio.create_task(orchestrator.chat_reply(req.message, req.work_dir or "", req.skill_id or "auto"))
+    return {"status": "started"}
 
 @app.post("/api/orchestrator/execute")
 async def execute_project(req: GoalRequest):
     asyncio.create_task(orchestrator.execute_plan(req.macro_goal))
     return {"status": "started"}
+
+@app.post("/api/orchestrator/clear")
+async def clear_orchestrator_state():
+    """Zera chat + plano + resultados em memória E em disco. Faz o 'Limpar Tudo' da UI
+    persistir após um refresh (antes só limpava o DOM e o init_state reenviava tudo)."""
+    orchestrator.clear_state()
+    await ws_manager.broadcast({"type": "state_cleared"})
+    return {"status": "cleared"}
+
+@app.get("/api/fs/browse")
+def browse_fs(path: Optional[str] = None):
+    """Navega pelo sistema de arquivos local para o seletor web de pastas."""
+    import string
+    drives = []
+    if sys.platform == "win32":
+        for letter in string.ascii_uppercase:
+            drive_path = f"{letter}:\\"
+            if os.path.exists(drive_path):
+                drives.append(drive_path)
+    else:
+        drives = ["/"]
+
+    current = path if (path and os.path.exists(path)) else config_manager.state.settings.active_work_dir
+    if not current or not os.path.exists(current):
+        current = drives[0] if drives else os.getcwd()
+
+    current = os.path.abspath(current)
+    parent = os.path.dirname(current) if os.path.dirname(current) != current else None
+
+    folders = []
+    try:
+        with os.scandir(current) as it:
+            for entry in it:
+                try:
+                    if entry.is_dir() and not entry.name.startswith(("$", ".")):
+                        folders.append({
+                            "name": entry.name,
+                            "path": os.path.abspath(entry.path)
+                        })
+                except (PermissionError, OSError):
+                    continue
+        folders.sort(key=lambda x: x["name"].lower())
+    except (PermissionError, OSError) as e:
+        return {
+            "status": "error",
+            "message": f"Acesso negado: {str(e)}",
+            "current_path": current,
+            "parent_path": parent,
+            "drives": drives,
+            "folders": []
+        }
+
+    return {
+        "status": "ok",
+        "current_path": current,
+        "parent_path": parent,
+        "drives": drives,
+        "folders": folders
+    }
+
+@app.post("/api/pick-folder")
+async def pick_folder():
+    """Abre um seletor nativo na máquina do usuário via Tkinter/PowerShell."""
+    import subprocess
+    
+    ps_code = (
+        "[void][System.Reflection.Assembly]::LoadWithPartialName('System.windows.forms');"
+        "$f = New-Object System.Windows.Forms.FolderBrowserDialog;"
+        "$f.Description = 'Selecione a pasta alvo do projeto';"
+        "$f.ShowNewFolderButton = $true;"
+        "if ($f.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { Write-Output $f.SelectedPath }"
+    )
+
+    def run_ps():
+        try:
+            out = subprocess.run(["powershell", "-NoProfile", "-Command", ps_code],
+                                 capture_output=True, text=True, timeout=120)
+            res = (out.stdout or "").strip()
+            if res and os.path.exists(res):
+                return res
+        except Exception:
+            pass
+        return None
+
+    tk_code = (
+        "import tkinter as tk\n"
+        "from tkinter import filedialog\n"
+        "r = tk.Tk()\n"
+        "r.withdraw()\n"
+        "r.wm_attributes('-topmost', 1)\n"
+        "p = filedialog.askdirectory(title='Selecione a pasta alvo do projeto')\n"
+        "r.destroy()\n"
+        "print(p or '')\n"
+    )
+
+    def run_tk():
+        try:
+            out = subprocess.run([sys.executable, "-c", tk_code],
+                                 capture_output=True, text=True, timeout=120)
+            return (out.stdout or "").strip()
+        except Exception as e:
+            return f"__ERROR__:{e}"
+
+    path = await asyncio.to_thread(run_ps)
+    if not path:
+        path = await asyncio.to_thread(run_tk)
+
+    if not path or path.startswith("__ERROR__:"):
+        return {"status": "error", "message": "Nenhuma pasta selecionada.", "path": ""}
+    return {"status": "ok", "path": path}
+
+@app.post("/api/nvidia-models/health")
+async def nvidia_models_health():
+    """Probe de INFERÊNCIA REAL dos modelos configurados por camada (chat streaming de 1
+    token). Faz o status 'ON' refletir se o modelo responde de fato — não apenas se a
+    chave é válida / o modelo aparece no catálogo."""
+    keys = config_manager.get_nvidia_keys()
+    if not keys:
+        return {"status": "no_keys", "models": []}
+    from backend.nvidia_router import nvidia_router
+    nvidia_router.update_keys(keys)
+    s = config_manager.state.settings
+    ordered = ["layer2_model", "layer2_fallback_model", "layer3_model",
+               "layer3_fallback_model", "layer1_fallback_model"]
+    models: List[str] = []
+    for k in ordered:
+        m = getattr(s, k, None)
+        if m and m not in models:
+            models.append(m)
+    # Distribui chaves diferentes por probe para não estourar RPM de uma única chave.
+    results = await asyncio.gather(*[
+        nvidia_router.probe_model(m, key=keys[i % len(keys)]) for i, m in enumerate(models)
+    ])
+    return {"status": "ok", "models": results}
 
 @app.post("/api/health-check")
 async def run_health_check(provider_id: Optional[str] = None):
@@ -276,8 +427,15 @@ async def websocket_endpoint(websocket: WebSocket):
             elif msg_type == "user_prompt":
                 macro_goal = data.get("prompt", "").strip()
                 work_dir = data.get("work_dir", "D:\\Singularity - Sistema Orquestrador IA")
+                skill_id = data.get("skill_id", "auto")
                 if macro_goal:
-                    asyncio.create_task(orchestrator.decompose_goal(macro_goal, work_dir))
+                    asyncio.create_task(orchestrator.decompose_goal(macro_goal, work_dir, skill_id))
+            elif msg_type == "chat_query":
+                message = data.get("message", "").strip()
+                work_dir = data.get("work_dir", "")
+                skill_id = data.get("skill_id", "auto")
+                if message:
+                    asyncio.create_task(orchestrator.chat_reply(message, work_dir, skill_id))
             elif msg_type == "start_execution":
                 macro_goal = data.get("prompt", "").strip()
                 asyncio.create_task(orchestrator.execute_plan(macro_goal))

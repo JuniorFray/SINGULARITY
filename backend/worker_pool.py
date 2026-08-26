@@ -38,6 +38,55 @@ def _backup(path: str):
         pass
 
 
+def _gather_referenced_files(instruction: str, work_dir: str, max_total: int = 60_000) -> str:
+    """Lê do disco o CONTEÚDO REAL atual dos arquivos existentes citados na instrução.
+
+    Determinístico: casa o caminho relativo real (qualquer separador) ou o basename contra
+    o texto da tarefa — não adivinha conteúdo, apenas anexa o que já está em disco. Dá ao
+    operário a fonte de verdade para (a) gerar 'patch' com 'search' casando exatamente 1x e
+    (b) NÃO recriar o arquivo do zero — causa-raiz de jogos/seções apagados quando o operário
+    trabalhava só com a instrução textual da Camada 2."""
+    if not work_dir or not os.path.isdir(work_dir):
+        return ""
+    matched: List[tuple] = []
+    seen = set()
+    for root, dirs, files in os.walk(work_dir):
+        dirs[:] = [d for d in dirs if d not in {"node_modules", ".git", "__pycache__", "venv", ".venv", "dist", "build"}]
+        for fname in sorted(files):
+            if fname.endswith(".bak"):
+                continue
+            fpath = os.path.join(root, fname)
+            rel = os.path.relpath(fpath, work_dir)
+            rel_slash = rel.replace("\\", "/")
+            # casa se a instrução menciona o caminho relativo (barra ou contrabarra) ou o basename
+            if rel_slash in instruction or rel in instruction or fname in instruction:
+                if fpath in seen:
+                    continue
+                seen.add(fpath)
+                try:
+                    with open(fpath, "r", encoding="utf-8", errors="replace") as f:
+                        matched.append((rel_slash, f.read()))
+                except Exception:
+                    continue
+    if not matched:
+        return ""
+    blocks = []
+    total = 0
+    for rel_slash, content in matched:
+        block = f"\n----- ARQUIVO EXISTENTE: {rel_slash} -----\n{content}\n----- FIM {rel_slash} -----\n"
+        if total + len(block) > max_total:
+            blocks.append("\n[...demais arquivos omitidos por limite de tamanho...]")
+            break
+        total += len(block)
+        blocks.append(block)
+    header = (
+        "CONTEÚDO REAL ATUAL DOS ARQUIVOS CITADOS (fonte de verdade — copie o 'search' EXATAMENTE "
+        "daqui). Estes arquivos JÁ EXISTEM: para alterá-los use 'patch' e PRESERVE todo o conteúdo "
+        "existente. NÃO recrie o arquivo do zero, NÃO remova jogos/seções/funções já presentes.\n"
+    )
+    return header + "".join(blocks)
+
+
 def _extract_json_obj(text: str) -> Optional[Dict[str, Any]]:
     """Extrai o objeto JSON da resposta do operário, tolerando cercas ```json acidentais."""
     if not text:
@@ -96,6 +145,77 @@ def _validate_file_syntax(path: str) -> Optional[str]:
     return None
 
 
+def _validate_staged_syntax(display_name: str, ext: str, content: str) -> Optional[str]:
+    """Valida a sintaxe do conteúdo FINAL antes de gravar (grava em arquivo temporário
+    e reaproveita _validate_file_syntax). Permite abortar o contrato inteiro sem tocar o
+    disco quando o resultado teria sintaxe inválida."""
+    ext = (ext or "").lower()
+    if ext == ".json":
+        try:
+            json.loads(content)
+        except Exception as e:
+            return f"JSON inválido: {e}"
+        return None
+    if ext not in (".py", ".js", ".mjs", ".cjs"):
+        return None
+    import tempfile
+    fd, tmp = tempfile.mkstemp(suffix=ext)
+    try:
+        os.close(fd)
+        with open(tmp, "w", encoding="utf-8") as f:
+            f.write(content)
+        err = _validate_file_syntax(tmp)
+        if err:
+            return err.replace(tmp, display_name)
+        return None
+    finally:
+        try:
+            os.remove(tmp)
+        except Exception:
+            pass
+
+
+def _gather_files_by_paths(paths: List[str], work_dir: str, max_total: int = 80_000) -> str:
+    """Lê o conteúdo REAL de uma lista explícita de caminhos (relativos ao work_dir).
+    Usado no Auto-Healing: quando o operário tenta escrever num arquivo (ex: criar um que já
+    existe, ou patch com search errado), devolvemos o conteúdo REAL COMPLETO desses arquivos
+    para ele conseguir gerar um patch com 'search' exato — em vez de continuar adivinhando."""
+    if not work_dir or not os.path.isdir(work_dir):
+        return ""
+    blocks = []
+    total = 0
+    seen = set()
+    for rel in paths or []:
+        rel = (rel or "").strip()
+        if not rel or rel in seen:
+            continue
+        seen.add(rel)
+        fpath = rel if os.path.isabs(rel) else os.path.join(work_dir, rel)
+        fpath = os.path.normpath(fpath)
+        if not os.path.isfile(fpath):
+            continue
+        try:
+            with open(fpath, "r", encoding="utf-8", errors="replace") as f:
+                content = f.read()
+        except Exception:
+            continue
+        rel_slash = rel.replace("\\", "/")
+        block = f"\n----- ARQUIVO EXISTENTE: {rel_slash} -----\n{content}\n----- FIM {rel_slash} -----\n"
+        if total + len(block) > max_total:
+            blocks.append("\n[...demais arquivos omitidos por limite de tamanho...]")
+            break
+        total += len(block)
+        blocks.append(block)
+    if not blocks:
+        return ""
+    header = (
+        "CONTEÚDO REAL ATUAL DOS ARQUIVOS QUE VOCÊ TENTOU ESCREVER (fonte de verdade). "
+        "Estes arquivos JÁ EXISTEM: use 'patch' copiando o 'search' EXATAMENTE daqui e "
+        "PRESERVE o conteúdo. NÃO recrie do zero.\n"
+    )
+    return header + "".join(blocks)
+
+
 def apply_json_contract(output_text: str, work_dir: str, allow_overwrite: bool = False) -> Dict[str, Any]:
     """Valida e aplica o contrato JSON de operações de arquivo. Retorna resultado
     estruturado consumido pelo Auto-Healing determinístico."""
@@ -106,6 +226,7 @@ def apply_json_contract(output_text: str, work_dir: str, allow_overwrite: bool =
         "errors": [],           # strings legíveis (viram prompt de correção)
         "operations_total": 0,
         "operations_ok": 0,
+        "attempted_paths": [],  # caminhos que o operário TENTOU escrever (p/ o Auto-Healing buscar o arquivo real)
     }
     if not work_dir:
         result["errors"].append("work_dir não definido — nada foi gravado.")
@@ -124,6 +245,27 @@ def apply_json_contract(output_text: str, work_dir: str, allow_overwrite: bool =
     result["operations_total"] = len(operations)
     wd_abs = os.path.normpath(os.path.abspath(work_dir))
 
+    staged: Dict[str, str] = {}        # target_path -> conteúdo final a gravar
+    orig_exists: Dict[str, bool] = {}  # target_path -> existia em disco ANTES do contrato
+
+    def _base_content(tp: str, exists_disk: bool) -> Optional[str]:
+        """Conteúdo-base para um patch/anti-clobber: versão já staged (se houver
+        operação anterior no mesmo arquivo) senão o conteúdo em disco."""
+        if tp in staged:
+            return staged[tp]
+        if exists_disk:
+            try:
+                with open(tp, "r", encoding="utf-8", errors="replace") as f:
+                    return f.read()
+            except Exception:
+                return None
+        return None
+
+    # ── FASE 1: validar TODAS as operações e montar o conteúdo final EM MEMÓRIA.
+    #    Nada é gravado aqui. Se qualquer operação falhar, o contrato inteiro é rejeitado
+    #    sem tocar o disco (atômico). Isso elimina escrita parcial e a DUPLICAÇÃO de
+    #    conteúdo quando o Auto-Healing reenvia o contrato (antes uma op boa era gravada,
+    #    a retry regravava a mesma op → card/jogo duplicado).
     for idx, op in enumerate(operations):
         if not isinstance(op, dict):
             result["errors"].append(f"Operação #{idx} inválida (não é objeto).")
@@ -133,6 +275,8 @@ def apply_json_contract(output_text: str, work_dir: str, allow_overwrite: bool =
         if not rel_path:
             result["errors"].append(f"Operação #{idx} sem 'path'.")
             continue
+        if rel_path not in result["attempted_paths"]:
+            result["attempted_paths"].append(rel_path)
 
         # Resolver caminho e impedir escape da pasta do projeto (segurança)
         target_path = rel_path if os.path.isabs(rel_path) else os.path.join(work_dir, rel_path)
@@ -141,7 +285,10 @@ def apply_json_contract(output_text: str, work_dir: str, allow_overwrite: bool =
             result["errors"].append(f"{rel_path}: caminho fora da pasta do projeto — rejeitado.")
             continue
 
-        exists = os.path.exists(target_path)
+        exists_disk = os.path.exists(target_path)
+        if target_path not in orig_exists:
+            orig_exists[target_path] = exists_disk
+        already = (target_path in staged) or exists_disk
 
         if op_type == "create":
             content = op.get("content")
@@ -149,22 +296,23 @@ def apply_json_contract(output_text: str, work_dir: str, allow_overwrite: bool =
                 result["errors"].append(f"{rel_path}: operação 'create' sem 'content'.")
                 continue
             # create só é permitido para arquivo inexistente — salvo refatoração total (allow_overwrite)
-            if exists and not allow_overwrite:
+            if already and not allow_overwrite:
                 result["errors"].append(
                     f"{rel_path}: arquivo já existe — 'create' rejeitado. Use 'patch' para editar."
                 )
                 continue
-            try:
-                parent = os.path.dirname(target_path)
-                if parent:
-                    os.makedirs(parent, exist_ok=True)
-                if exists:
-                    _backup(target_path)
-                with open(target_path, "w", encoding="utf-8") as f:
-                    f.write(content)
-            except Exception as e:
-                result["errors"].append(f"{rel_path}: erro ao gravar (create): {e}")
-                continue
+            # Trava anti-destruição: mesmo com allow_overwrite, um 'create' que ENCOLHE
+            # drasticamente um arquivo não-trivial é quase sempre alucinação (apagar jogos/seções).
+            if already and allow_overwrite:
+                base = _base_content(target_path, exists_disk) or ""
+                if base and len(base) > 400 and len(content) < 0.6 * len(base):
+                    result["errors"].append(
+                        f"{rel_path}: 'create' com allow_overwrite reduziria o arquivo de {len(base)} "
+                        f"para {len(content)} bytes (perda de conteúdo detectada). Rejeitado — use 'patch' "
+                        f"para alterar apenas o necessário e preservar o conteúdo existente."
+                    )
+                    continue
+            staged[target_path] = content
 
         elif op_type == "patch":
             search = op.get("search")
@@ -172,47 +320,57 @@ def apply_json_contract(output_text: str, work_dir: str, allow_overwrite: bool =
             if search is None or replace is None:
                 result["errors"].append(f"{rel_path}: operação 'patch' exige 'search' e 'replace'.")
                 continue
-            if not exists:
+            base = _base_content(target_path, exists_disk)
+            if base is None:
                 result["errors"].append(f"{rel_path}: arquivo não existe — 'patch' impossível. Use 'create'.")
                 continue
-            try:
-                with open(target_path, "r", encoding="utf-8", errors="replace") as f:
-                    current = f.read()
-            except Exception as e:
-                result["errors"].append(f"{rel_path}: erro ao ler para patch: {e}")
-                continue
             # search deve casar EXATAMENTE 1x (mesmo princípio do str_replace)
-            count = current.count(search)
+            count = base.count(search)
             if count != 1:
-                snippet = current if len(current) <= 4000 else current[:4000] + "\n[...conteúdo truncado...]"
+                snippet = base if len(base) <= 4000 else base[:4000] + "\n[...conteúdo truncado...]"
                 result["errors"].append(
                     f"{rel_path}: 'search' casou {count}x (esperado exatamente 1). "
                     f"Trecho procurado:\n<<<SEARCH>>>\n{search}\n<<<END>>>\n"
                     f"Conteúdo atual real do arquivo:\n{snippet}"
                 )
                 continue
-            try:
-                _backup(target_path)
-                new_content = current.replace(search, replace, 1)
-                with open(target_path, "w", encoding="utf-8") as f:
-                    f.write(new_content)
-            except Exception as e:
-                result["errors"].append(f"{rel_path}: erro ao gravar (patch): {e}")
-                continue
+            staged[target_path] = base.replace(search, replace, 1)
         else:
             result["errors"].append(f"{rel_path}: 'type' inválido ('{op_type}'). Use 'create' ou 'patch'.")
             continue
 
-        # Checagem de sintaxe determinística pós-escrita → gatilho de Auto-Healing
-        syntax_err = _validate_file_syntax(target_path)
-        if syntax_err:
-            result["errors"].append(f"{rel_path}: erro de sintaxe pós-escrita:\n{syntax_err}")
-            continue
+    if result["errors"]:
+        return result  # atômico: nenhuma operação foi gravada
 
-        result["affected_files"].append(target_path)
+    if not staged:
+        result["errors"].append("Nenhuma operação de arquivo válida no contrato.")
+        return result
+
+    # ── FASE 2: checagem de sintaxe do conteúdo FINAL antes de gravar (arquivo temporário).
+    for tp, content in staged.items():
+        ext = os.path.splitext(tp)[1].lower()
+        serr = _validate_staged_syntax(os.path.basename(tp), ext, content)
+        if serr:
+            result["errors"].append(f"{os.path.relpath(tp, work_dir)}: erro de sintaxe:\n{serr}")
+    if result["errors"]:
+        return result  # atômico: nada gravado se a sintaxe final estiver quebrada
+
+    # ── FASE 3: commit — backup + gravação de TUDO de uma vez.
+    for tp, content in staged.items():
+        try:
+            parent = os.path.dirname(tp)
+            if parent:
+                os.makedirs(parent, exist_ok=True)
+            if orig_exists.get(tp):
+                _backup(tp)
+            with open(tp, "w", encoding="utf-8") as f:
+                f.write(content)
+        except Exception as e:
+            result["errors"].append(f"{os.path.relpath(tp, work_dir)}: erro ao gravar: {e}")
+            continue
+        result["affected_files"].append(tp)
         result["operations_ok"] += 1
 
-    # Sucesso apenas se parseou, aplicou ao menos 1 operação e nenhuma falhou
     result["ok"] = (not result["errors"]) and result["operations_ok"] > 0
     return result
 
@@ -285,7 +443,15 @@ class TaskWorker:
 
         max_healing = max(0, settings.auto_healing_max_attempts)
         healing_attempts = 0  # LOCAL — corrige o vazamento de estado do antigo self._healing_attempts
-        user_content = f"TAREFA: {instrucao}"
+
+        # Fonte de verdade: anexa o conteúdo REAL atual dos arquivos citados na tarefa.
+        # Sem isso o operário trabalhava só com a instrução textual e tendia a recriar o
+        # arquivo inteiro (apagando jogos/seções existentes).
+        referenced_block = await asyncio.to_thread(_gather_referenced_files, instrucao, target_dir)
+        task_block = f"TAREFA: {instrucao}"
+        if referenced_block:
+            task_block = f"{task_block}\n\n{referenced_block}"
+        user_content = task_block
         primary_model = model_pipeline[0] if model_pipeline else settings.layer3_model
 
         while True:
@@ -298,7 +464,11 @@ class TaskWorker:
                 temperature=0.2,
                 broadcaster_fn=self.broadcaster_fn,
             )
-            await self.broadcast_log(res_text, "stdout")
+            # Broadcast TRUNCADO para a UI: respostas do modelo podem ter milhares de linhas
+            # (arquivo de jogo inteiro). Mandar tudo pelo WebSocket derrubava a conexão
+            # (loop de "Conexão perdida. Reconectando..."). O conteúdo completo vai pro disco.
+            _preview = res_text if len(res_text) <= 1500 else res_text[:1500] + f"\n[...+{len(res_text)-1500} chars — resposta completa aplicada no disco...]"
+            await self.broadcast_log(_preview, "stdout")
 
             # Aplicar o contrato num thread (I/O + subprocess node --check não bloqueiam o loop)
             contract = await asyncio.to_thread(apply_json_contract, res_text, target_dir, allow_overwrite)
@@ -343,15 +513,25 @@ class TaskWorker:
                 f"🔧 [Auto-Healing {healing_attempts}/{max_healing}] {trigger}. Reenviando com erro estruturado...",
                 "warning"
             )
-            # Reprompt do MESMO operário com o erro EXATO (não um trecho arbitrário de stdout)
+            # Reprompt do MESMO operário com o erro EXATO (não um trecho arbitrário de stdout).
+            # AUTO-CORREÇÃO: além do erro, injeta o conteúdo REAL COMPLETO dos arquivos que ele
+            # tentou escrever (mesmo que a instrução original fosse genérica e não os citasse).
+            # Isso resolve o caso de o operário "voar cego" e alucinar o search do patch.
+            heal_files = await asyncio.to_thread(
+                _gather_files_by_paths, contract.get("attempted_paths", []), target_dir
+            )
+            truth_block = heal_files or referenced_block
+            truth_suffix = f"\n\n{truth_block}" if truth_block else ""
             heal_prefix = f"{CAVEMAN_PROMPT}\n\n" if settings.use_caveman else ""
             user_content = (
                 f"{heal_prefix}TAREFA ORIGINAL:\n{instrucao}\n\n"
                 f"Sua resposta anterior FALHOU na validação do contrato de escrita. "
                 f"Corrija e responda novamente APENAS com o JSON de operações válido.\n\n"
                 f"ERROS EXATOS:\n{error_summary}\n\n"
-                f"Lembre: use 'patch' (com 'search' casando exatamente 1x) para arquivos existentes "
-                f"e 'create' apenas para arquivos novos."
+                f"Lembre: use 'patch' (com 'search' casando exatamente 1x, copiado LITERALMENTE do "
+                f"conteúdo real abaixo) para arquivos existentes e 'create' apenas para arquivos NOVOS. "
+                f"PRESERVE todo o conteúdo existente."
+                f"{truth_suffix}"
             )
 
     async def execute(
@@ -403,8 +583,14 @@ class TaskWorker:
         target_dir = work_dir if (work_dir and os.path.exists(work_dir)) else config_manager.state.settings.active_work_dir
         exec_cwd = target_dir if (target_dir and os.path.exists(target_dir)) else None
 
+        # Toggle CLI desligado → força qualquer tarefa CLI (antigravity/claude_code) para o
+        # caminho NVIDIA (contrato JSON), evitando a cota do Antigravity.
+        force_nvidia = (not settings.use_cli_providers)
+        if force_nvidia and provider_id not in ("nvidia",):
+            await self.broadcast_log(f"🖥️ [CLI desligado] Redirecionando tarefa #{task_id} para NVIDIA NIM.", "info")
+
         # ─── EXECUÇÃO VIA NVIDIA NIM API (contrato JSON de escrita) ──────────
-        if provider_config.id == "nvidia" or provider_id == "nvidia":
+        if provider_config.id == "nvidia" or provider_id == "nvidia" or force_nvidia:
             keys = config_manager.get_nvidia_keys()
             if keys:
                 # Camada 3 usa o modelo dedicado a código (settings), não a lista estática do provider

@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Jogo da Memória — encontre os pares de cartas antes que o tempo acabe!" />
+  <meta name="theme-color" content="#0a0a14" />
+  <title>Jogo da Memória — Mini Jogos</title>
+  <link rel="stylesheet" href="../css/style.css" />
+  <link rel="stylesheet" href="../css/memoria.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet" />
+</head>
+<body class="game-page">
+
+  <!-- Start Overlay -->
+  <div class="game-overlay" id="overlay-start" role="dialog" aria-labelledby="start-title" aria-modal="true">
+    <div class="overlay-card">
+      <div class="overlay-icon">🃏</div>
+      <h1 class="overlay-title" id="start-title">Jogo da Memória</h1>
+      <p class="overlay-subtitle">Encontre todos os 8 pares de cartas o mais rápido possível. Menos jogadas = mais pontos!</p>
+      <div class="difficulty-selector" role="group" aria-label="Selecione a dificuldade">
+        <button class="diff-btn active" id="diff-easy" data-pairs="8" data-time="120">Fácil</button>
+        <button class="diff-btn" id="diff-medium" data-pairs="12" data-time="90">Médio</button>
+        <button class="diff-btn" id="diff-hard" data-pairs="18" data-time="60">Difícil</button>
+      </div>
+      <button class="btn btn-primary" id="btn-start-memoria" style="background: var(--clr-teal); color: hsl(220, 20%, 7%); border-color: var(--clr-teal); width: 100%;">
+        <span>Iniciar Jogo</span> <span>🚀</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Game Over Overlay -->
+  <div class="game-overlay hidden" id="overlay-gameover" role="dialog" aria-modal="true">
+    <div class="overlay-card">
+      <div class="overlay-icon" id="go-icon">⏰</div>
+      <h2 class="overlay-title" id="go-title">Fim de Jogo!</h2>
+      <p class="overlay-subtitle" id="go-subtitle">Que tal tentar de novo?</p>
+      <div class="overlay-score" id="go-score">0 pts</div>
+      <div style="display:flex; gap: 0.75rem; justify-content:center; flex-wrap:wrap; width: 100%;">
+        <button class="btn btn-primary" id="btn-retry" style="background: var(--clr-teal); color: hsl(220, 20%, 7%); border-color: var(--clr-teal); flex: 1;">
+          🔄 De Novo
+        </button>
+        <a href="../index.html" class="btn btn-outline" style="text-decoration:none; flex: 1;">
+          🏠 Hub
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Navigation -->
+  <nav class="game-nav" aria-label="Navegação do jogo">
+    <a href="../index.html" class="nav-back" id="nav-back-memoria">← Voltar</a>
+    <span class="nav-title">🃏 Memória</span>
+    <div class="nav-score" id="score-display" aria-live="polite" aria-label="Pontuação">0 pts</div>
+  </nav>
+
+  <!-- Game Area -->
+  <main class="game-container" id="memoria-container">
+    <!-- Status Bar -->
+    <div class="game-status" role="status" aria-live="polite">
+      <div class="status-item">
+        <span class="status-label">Tempo</span>
+        <span class="status-value" id="timer-display">2:00</span>
+      </div>
+      <div class="status-item">
+        <span class="status-label">Jogadas</span>
+        <span class="status-value" id="moves-display">0</span>
+      </div>
+      <div class="status-item">
+        <span class="status-label">Pares</span>
+        <span class="status-value" id="pairs-display">0/8</span>
+      </div>
+    </div>
+
+    <!-- Card Grid -->
+    <div class="memory-grid" id="memory-grid" role="grid" aria-label="Grade de cartas da memória"></div>
+  </main>
+
+  <script src="../js/memoria.js"></script>
+</body>
+</html>
