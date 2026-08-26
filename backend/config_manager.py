@@ -25,16 +25,16 @@ class SettingsConfig(BaseModel):
     use_cli_providers: bool = True
     max_workers: int = 2
     default_provider: str = "nvidia"
-    default_model: str = "nvidia/nemotron-3-super-120b-a12b"
+    default_model: str = "nvidia/nemotron-3-nano-30b-a3b"
     active_work_dir: str = "D:\\APP android teste"
     # Camada 1: Estratégica (Claude via CLI agy) — fallback NVIDIA dedicado
-    layer1_fallback_model: str = "nvidia/nemotron-3-super-120b-a12b"
+    layer1_fallback_model: str = "nvidia/nemotron-3-nano-30b-a3b"
     # Camada 2: Gerencial (NVIDIA NIM) — contexto longo (1M) + raciocínio
-    layer2_model: str = "nvidia/nemotron-3-super-120b-a12b"
-    layer2_fallback_model: str = "nvidia/nemotron-3-nano-30b-a3b"
+    layer2_model: str = "nvidia/nemotron-3-nano-30b-a3b"
+    layer2_fallback_model: str = "nvidia/nemotron-3-super-120b-a12b"
     # Camada 3: Operacional (NVIDIA NIM) — modelo dedicado a código
-    layer3_model: str = "nvidia/nemotron-3-super-120b-a12b"
-    layer3_fallback_model: str = "nvidia/nemotron-3-nano-30b-a3b"
+    layer3_model: str = "nvidia/nemotron-3-nano-30b-a3b"
+    layer3_fallback_model: str = "nvidia/nemotron-3-super-120b-a12b"
     # Auto-Healing
     auto_healing_model: str = "nvidia/nemotron-3-nano-30b-a3b"
     auto_healing_max_attempts: int = 3

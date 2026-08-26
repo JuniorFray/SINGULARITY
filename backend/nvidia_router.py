@@ -115,31 +115,58 @@ class NvidiaRouter:
                     # STREAMING: consome token a token. Isso mantém a conexão viva durante
                     # o cold-start (glm-5.2 leva ~65s até o 1º token) e permite retorno mesmo
                     # em respostas longas de modelos reasoning. Acumula e devolve o texto completo.
-                    stream = await client.chat.completions.create(
-                        model=model,
-                        messages=messages,
-                        temperature=temperature,
-                        max_tokens=max_tokens,
-                        stream=True
+                    stream = await asyncio.wait_for(
+                        client.chat.completions.create(
+                            model=model,
+                            messages=messages,
+                            temperature=temperature,
+                            max_tokens=min(max_tokens, 4096),
+                            stream=True
+                        ),
+                        timeout=45.0
                     )
                     parts: List[str] = []
                     first_token_seen = False
+                    start_stream_time = time.time()
+                    last_progress_time = start_stream_time
+                    token_count = 0
+
                     async for chunk in stream:
                         if not chunk.choices:
                             continue
                         delta = chunk.choices[0].delta.content
                         if delta:
+                            token_count += 1
                             if not first_token_seen and broadcaster_fn:
                                 first_token_seen = True
                                 await broadcaster_fn({
                                     "type": "terminal_log",
                                     "worker_id": "nvidia_router",
-                                    "text": f"🟢 [NVIDIA NIM] {model} respondendo (streaming)...",
+                                    "text": f"🟢 [NVIDIA NIM] {model} começou a responder...",
                                     "log_type": "info"
                                 })
                             parts.append(delta)
+                            now = time.time()
+                            if broadcaster_fn and (now - last_progress_time >= 2.5 or token_count % 60 == 0):
+                                last_progress_time = now
+                                elapsed = round(now - start_stream_time, 1)
+                                await broadcaster_fn({
+                                    "type": "terminal_log",
+                                    "worker_id": "nvidia_router",
+                                    "text": f"⚡ [NVIDIA NIM] {model} processando ({token_count} chunks | {elapsed}s)...",
+                                    "log_type": "info"
+                                })
+
                     full = "".join(parts)
                     if full.strip():
+                        elapsed = round(time.time() - start_stream_time, 1)
+                        if broadcaster_fn:
+                            await broadcaster_fn({
+                                "type": "terminal_log",
+                                "worker_id": "nvidia_router",
+                                "text": f"✅ [NVIDIA NIM] {model}: resposta completa ({token_count} chunks em {elapsed}s).",
+                                "log_type": "success"
+                            })
                         return full
                     # Resposta vazia → trata como falha e tenta o próximo modelo
                     raise RuntimeError(f"modelo '{model}' retornou resposta vazia")

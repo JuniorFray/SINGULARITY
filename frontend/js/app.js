@@ -248,8 +248,14 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         if (prompt) appendChatMessage('user', prompt);
         promptInput.value = '';
-        // Feedback imediato (não fica sem resposta enquanto a Camada 1/2 pensa)
-        appendChatMessage('orchestrator', prompt ? '🚀 Gerando plano...' : '🚀 Gerando plano a partir da conversa...');
+        // Feedback imediato com spinner no botão e no chat
+        appendChatMessage('orchestrator', prompt ? '🚀 Gerando plano de arquitetura e tarefas...' : '🚀 Gerando plano a partir da conversa...');
+        showTyping();
+
+        if (btnSendPrompt) {
+            btnSendPrompt.disabled = true;
+            btnSendPrompt.innerHTML = '<span>⏳ Planejando...</span>';
+        }
 
         if (ws && ws.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify({
@@ -338,6 +344,11 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function renderPlan(plan) {
+        removeTyping();
+        if (btnSendPrompt) {
+            btnSendPrompt.disabled = false;
+            btnSendPrompt.innerHTML = '<span>Gerar Plano</span> ➔';
+        }
         planContainer.classList.remove('hidden');
         planTitle.textContent = plan.project_title || 'Plano do Projeto';
         planSummary.textContent = plan.summary || '';

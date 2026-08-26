@@ -240,7 +240,7 @@ class OrchestratorEngine:
                     from backend.nvidia_router import nvidia_router
                     nvidia_router.update_keys(config_manager.get_nvidia_keys())
                     res = await nvidia_router.execute(
-                        model_pipeline=[settings.layer1_fallback_model, settings.layer2_fallback_model, "meta/llama-3.1-8b-instruct"],
+                        model_pipeline=[settings.layer1_fallback_model, settings.layer2_fallback_model, "nvidia/nemotron-3-nano-30b-a3b"],
                         messages=[
                             {"role": "system", "content": "Você é o Orquestrador Central. Responda com clareza e siga estritamente o formato solicitado."},
                             {"role": "user", "content": full_prompt}
@@ -302,7 +302,7 @@ class OrchestratorEngine:
             nvidia_router.update_keys(keys)
             messages = [{"role": "system", "content": system_prompt}] + self.qa_history[-12:]
             reply = await nvidia_router.execute(
-                model_pipeline=[settings.layer2_model, settings.layer2_fallback_model, "meta/llama-3.1-8b-instruct"],
+                model_pipeline=[settings.layer2_model, settings.layer2_fallback_model, "nvidia/nemotron-3-nano-30b-a3b"],
                 messages=messages,
                 temperature=0.4,
                 broadcaster_fn=self.broadcaster_fn,
